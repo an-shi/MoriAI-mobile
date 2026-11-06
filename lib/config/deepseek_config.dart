@@ -1,10 +1,39 @@
+class DeepSeekModelOption {
+  const DeepSeekModelOption({
+    required this.id,
+    required this.name,
+    required this.description,
+  });
+
+  final String id;
+  final String name;
+  final String description;
+}
+
 abstract final class DeepSeekConfig {
   static const String baseUrl = 'https://api.deepseek.com';
 
-  /// 官方文档当前提供的模型：
-  /// - deepseek-flash：响应更快，适合日常聊天（默认）
-  /// - deepseek-v4-pro：能力更强，价格更高
-  static const String model = 'deepseek-flash';
+  static const String defaultModel = 'deepseek-flash';
+
+  /// 官方文档当前提供的模型。
+  static const List<DeepSeekModelOption> models = [
+    DeepSeekModelOption(
+      id: 'deepseek-flash',
+      name: 'DeepSeek Flash',
+      description: '响应更快，适合日常陪伴聊天',
+    ),
+    DeepSeekModelOption(
+      id: 'deepseek-v4-pro',
+      name: 'DeepSeek V4 Pro',
+      description: '能力更强，适合复杂问题，价格更高',
+    ),
+  ];
+
+  static bool isSupportedModel(String id) =>
+      models.any((model) => model.id == id);
+
+  static DeepSeekModelOption modelOption(String id) =>
+      models.firstWhere((model) => model.id == id, orElse: () => models.first);
 
   static const String systemPrompt = '''
 你叫 Mori，是一个温柔、真诚、带一点幽默感的 AI 陪伴助手。

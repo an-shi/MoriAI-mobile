@@ -33,9 +33,13 @@ void main() {
     final service = DeepSeekService(client: client);
     addTearDown(service.dispose);
 
-    final chunks = await service.streamChat([
-      const ChatMessage(role: ChatRole.user, content: '嗨'),
-    ], apiKey: 'test-key').toList();
+    final chunks = await service
+        .streamChat(
+          [const ChatMessage(role: ChatRole.user, content: '嗨')],
+          apiKey: 'test-key',
+          model: 'deepseek-flash',
+        )
+        .toList();
 
     expect(chunks, ['你', '好']);
     expect(
@@ -50,9 +54,13 @@ void main() {
     addTearDown(service.dispose);
 
     await expectLater(
-      service.streamChat([
-        const ChatMessage(role: ChatRole.user, content: '嗨'),
-      ], apiKey: '').toList(),
+      service
+          .streamChat(
+            [const ChatMessage(role: ChatRole.user, content: '嗨')],
+            apiKey: '',
+            model: 'deepseek-flash',
+          )
+          .toList(),
       throwsA(isA<DeepSeekException>()),
     );
   });

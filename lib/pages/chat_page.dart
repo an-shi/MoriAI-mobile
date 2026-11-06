@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mori_ai/models/chat_message.dart';
 import 'package:mori_ai/services/api_key_store.dart';
 import 'package:mori_ai/services/deepseek_service.dart';
+import 'package:mori_ai/services/model_store.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -61,6 +62,8 @@ class _ChatPageState extends State<ChatPage> {
       return;
     }
 
+    final model = ModelStore.instance.model.value;
+
     _inputController.clear();
 
     final history = [
@@ -80,7 +83,11 @@ class _ChatPageState extends State<ChatPage> {
     final buffer = StringBuffer();
 
     try {
-      await for (final chunk in _service.streamChat(history, apiKey: apiKey)) {
+      await for (final chunk in _service.streamChat(
+        history,
+        apiKey: apiKey,
+        model: model,
+      )) {
         if (!mounted) {
           return;
         }

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mori_ai/pages/home_page.dart';
 import 'package:mori_ai/services/api_key_store.dart';
+import 'package:mori_ai/services/model_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await ApiKeyStore.instance.load();
+  await Future.wait([ApiKeyStore.instance.load(), ModelStore.instance.load()]);
   runApp(const MoriApp());
 }
 

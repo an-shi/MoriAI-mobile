@@ -22,10 +22,16 @@ class DeepSeekService {
   Stream<String> streamChat(
     List<ChatMessage> messages, {
     required String apiKey,
+    required String model,
   }) async* {
     final key = apiKey.trim();
     if (key.isEmpty) {
       throw const DeepSeekException('尚未配置 DeepSeek API Key，请先在「设置」中填写。');
+    }
+
+    final modelId = model.trim();
+    if (modelId.isEmpty) {
+      throw const DeepSeekException('尚未选择模型，请先在「设置」中选择。');
     }
 
     final request =
@@ -39,7 +45,7 @@ class DeepSeekService {
             'Content-Type': 'application/json',
           })
           ..body = jsonEncode({
-            'model': DeepSeekConfig.model,
+            'model': modelId,
             'messages': [
               {'role': 'system', 'content': DeepSeekConfig.systemPrompt},
               ...messages.map((message) => message.toApiJson()),

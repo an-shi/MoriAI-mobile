@@ -15,6 +15,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('DeepSeek API'), findsOneWidget);
     expect(find.text('API Key'), findsOneWidget);
+    expect(find.text('对话模型'), findsOneWidget);
     expect(find.text('外观'), findsOneWidget);
     expect(find.text('关于 Mori'), findsOneWidget);
   });

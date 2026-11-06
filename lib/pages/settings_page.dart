@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:mori_ai/config/deepseek_config.dart';
 import 'package:mori_ai/services/api_key_store.dart';
+import 'package:mori_ai/services/model_store.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -10,6 +12,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _apiKeyController;
+  late String _selectedModel;
   bool _obscureKey = true;
   bool _saving = false;
 
@@ -19,6 +22,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _apiKeyController = TextEditingController(
       text: ApiKeyStore.instance.apiKey.value ?? '',
     );
+    _selectedModel = ModelStore.instance.model.value;
   }
 
   @override
@@ -79,6 +83,29 @@ class _SettingsPageState extends State<SettingsPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _changeModel(String? modelId) async {
+    if (modelId == null || modelId == _selectedModel) {
+      return;
+    }
+
+    final previous = _selectedModel;
+    setState(() => _selectedModel = modelId);
+
+    try {
+      await ModelStore.instance.save(modelId);
+      if (!mounted) {
+        return;
+      }
+      _showSnackBar('已切换到 ${DeepSeekConfig.modelOption(modelId).name}');
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _selectedModel = previous);
+      _showSnackBar('模型设置保存失败，请重试');
+    }
   }
 
   @override
@@ -203,8 +230,46 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                Divider(height: 32, color: colors.outlineVariant),
                 Text(
-                  '修改后下一条消息立即生效',
+                  '对话模型',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  key: ValueKey(_selectedModel),
+                  initialValue: _selectedModel,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                  ),
+                  items: [
+                    for (final option in DeepSeekConfig.models)
+                      DropdownMenuItem<String>(
+                        value: option.id,
+                        child: Text(option.name),
+                      ),
+                  ],
+                  onChanged: _changeModel,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  DeepSeekConfig.modelOption(_selectedModel).description,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'API Key 和模型修改后，下一条消息立即生效',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colors.onSurfaceVariant,
                   ),
