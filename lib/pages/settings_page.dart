@@ -1,313 +1,199 @@
 import 'package:flutter/material.dart';
-import 'package:mori_ai/config/deepseek_config.dart';
-import 'package:mori_ai/services/api_key_store.dart';
+import 'package:mori_ai/config/model_providers.dart';
+import 'package:mori_ai/models/model_settings.dart';
+import 'package:mori_ai/pages/settings/about_settings_page.dart';
+import 'package:mori_ai/pages/settings/appearance_settings_page.dart';
+import 'package:mori_ai/pages/settings/model_settings_page.dart';
 import 'package:mori_ai/services/model_store.dart';
+import 'package:mori_ai/services/theme_store.dart';
 
-class SettingsPage extends StatefulWidget {
+class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
   @override
-  State<SettingsPage> createState() => _SettingsPageState();
-}
-
-class _SettingsPageState extends State<SettingsPage> {
-  late final TextEditingController _apiKeyController;
-  late String _selectedModel;
-  bool _obscureKey = true;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _apiKeyController = TextEditingController(
-      text: ApiKeyStore.instance.apiKey.value ?? '',
-    );
-    _selectedModel = ModelStore.instance.model.value;
-  }
-
-  @override
-  void dispose() {
-    _apiKeyController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _saveApiKey() async {
-    final key = _apiKeyController.text.trim();
-    if (key.isEmpty) {
-      _showSnackBar('请先输入 API Key');
-      return;
-    }
-
-    setState(() => _saving = true);
-    try {
-      await ApiKeyStore.instance.save(key);
-      if (!mounted) {
-        return;
-      }
-      _apiKeyController.text = key;
-      _showSnackBar('API Key 已保存');
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      _showSnackBar('保存失败，请重试');
-    } finally {
-      if (mounted) {
-        setState(() => _saving = false);
-      }
-    }
-  }
-
-  Future<void> _clearApiKey() async {
-    setState(() => _saving = true);
-    try {
-      await ApiKeyStore.instance.clear();
-      if (!mounted) {
-        return;
-      }
-      _apiKeyController.clear();
-      _showSnackBar('API Key 已清除');
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      _showSnackBar('清除失败，请重试');
-    } finally {
-      if (mounted) {
-        setState(() => _saving = false);
-      }
-    }
-  }
-
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _changeModel(String? modelId) async {
-    if (modelId == null || modelId == _selectedModel) {
-      return;
-    }
-
-    final previous = _selectedModel;
-    setState(() => _selectedModel = modelId);
-
-    try {
-      await ModelStore.instance.save(modelId);
-      if (!mounted) {
-        return;
-      }
-      _showSnackBar('已切换到 ${DeepSeekConfig.modelOption(modelId).name}');
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() => _selectedModel = previous);
-      _showSnackBar('模型设置保存失败，请重试');
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final hasKey = ApiKeyStore.instance.apiKey.value?.isNotEmpty ?? false;
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        ModelStore.instance.selection,
+        ModelStore.instance.activePresetId,
+        ModelStore.instance.presets,
+        ThemeStore.instance.themeMode,
+      ]),
+      builder: (context, _) {
+        final theme = Theme.of(context);
+        final colors = theme.colorScheme;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          elevation: 0,
-          color: colors.surfaceContainerLow,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          children: [
+            Text(
+              '偏好设置',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _SettingsMenuCard(
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.key_rounded, color: colors.primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'DeepSeek API',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                _SettingsMenuTile(
+                  icon: Icons.memory_rounded,
+                  title: '模型',
+                  subtitle: _modelSummary(),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const ModelSettingsPage(),
                       ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: hasKey
-                            ? colors.primaryContainer
-                            : colors.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        hasKey ? '已配置' : '未配置',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: hasKey
-                              ? colors.onPrimaryContainer
-                              : colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'API Key 仅保存在本机安全存储中，用于直连 DeepSeek 官方 API。',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _apiKeyController,
-                  obscureText: _obscureKey,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  smartDashesType: SmartDashesType.disabled,
-                  smartQuotesType: SmartQuotesType.disabled,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) {
-                    if (!_saving) {
-                      _saveApiKey();
-                    }
+                    );
                   },
-                  decoration: InputDecoration(
-                    labelText: 'API Key',
-                    hintText: 'sk-...',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    suffixIcon: IconButton(
-                      onPressed: () {
-                        setState(() => _obscureKey = !_obscureKey);
-                      },
-                      icon: Icon(
-                        _obscureKey
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
+                ),
+                const _SettingsMenuDivider(),
+                _SettingsMenuTile(
+                  icon: Icons.palette_outlined,
+                  title: '外观',
+                  subtitle: _themeModeLabel(
+                    ThemeStore.instance.themeMode.value,
+                  ),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AppearanceSettingsPage(),
                       ),
-                      tooltip: _obscureKey ? '显示' : '隐藏',
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: _saving ? null : _saveApiKey,
-                        child: _saving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('保存'),
-                      ),
-                    ),
-                    if (hasKey) ...[
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: _saving ? null : _clearApiKey,
-                        child: const Text('清除'),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Divider(height: 32, color: colors.outlineVariant),
-                Text(
-                  '对话模型',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  key: ValueKey(_selectedModel),
-                  initialValue: _selectedModel,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                  ),
-                  items: [
-                    for (final option in DeepSeekConfig.models)
-                      DropdownMenuItem<String>(
-                        value: option.id,
-                        child: Text(option.name),
-                      ),
-                  ],
-                  onChanged: _changeModel,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  DeepSeekConfig.modelOption(_selectedModel).description,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'API Key 和模型修改后，下一条消息立即生效',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
+                    );
+                  },
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 16),
+            Text(
+              '其他',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _SettingsMenuCard(
+              children: [
+                _SettingsMenuTile(
+                  icon: Icons.info_outline_rounded,
+                  title: '关于 Mori',
+                  subtitle: '版本 1.0.0',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AboutSettingsPage(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _modelSummary() {
+    final selection = ModelStore.instance.selection.value;
+    final provider =
+        ModelProviderCatalog.byId(selection.providerId) ??
+        ModelProviderCatalog.defaultProvider;
+
+    if (!selection.hasModel) {
+      return '${provider.name} · 尚未选择模型';
+    }
+
+    final activeId = ModelStore.instance.activePresetId.value;
+    ModelPreset? activePreset;
+    for (final preset in ModelStore.instance.presets.value) {
+      if (preset.id == activeId) {
+        activePreset = preset;
+        break;
+      }
+    }
+
+    if (activePreset != null) {
+      return activePreset.name;
+    }
+    return '${provider.name} · ${selection.modelId}';
+  }
+
+  String _themeModeLabel(ThemeMode mode) {
+    return switch (mode) {
+      ThemeMode.system => '跟随系统',
+      ThemeMode.light => '浅色模式',
+      ThemeMode.dark => '深色模式',
+    };
+  }
+}
+
+class _SettingsMenuCard extends StatelessWidget {
+  const _SettingsMenuCard({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Column(children: children),
+    );
+  }
+}
+
+class _SettingsMenuTile extends StatelessWidget {
+  const _SettingsMenuTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: colors.primaryContainer,
+          borderRadius: BorderRadius.circular(12),
         ),
-        const SizedBox(height: 16),
-        Card(
-          elevation: 0,
-          color: colors.surfaceContainerLow,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            children: [
-              const ListTile(
-                leading: Icon(Icons.palette_outlined),
-                title: Text('外观'),
-                subtitle: Text('跟随系统'),
-              ),
-              Divider(
-                height: 1,
-                indent: 16,
-                endIndent: 16,
-                color: colors.outlineVariant,
-              ),
-              const ListTile(
-                leading: Icon(Icons.info_outline),
-                title: Text('关于 Mori'),
-                subtitle: Text('版本 1.0.0'),
-              ),
-            ],
-          ),
-        ),
-      ],
+        child: Icon(icon, color: colors.onPrimaryContainer),
+      ),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        color: colors.onSurfaceVariant,
+      ),
+      onTap: onTap,
+    );
+  }
+}
+
+class _SettingsMenuDivider extends StatelessWidget {
+  const _SettingsMenuDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Divider(
+      height: 1,
+      indent: 72,
+      endIndent: 16,
+      color: Theme.of(context).colorScheme.outlineVariant,
     );
   }
 }
