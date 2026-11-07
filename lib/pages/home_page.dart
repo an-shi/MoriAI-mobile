@@ -11,7 +11,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  static const _titles = ['对话', '记忆', '设置'];
+  static const _titles = ['对话', '记忆与人格卡', '设置'];
 
   static const _pages = [ChatPage(), MemoryPage(), SettingsPage()];
 
@@ -43,7 +43,7 @@ class _HomePageState extends State<HomePage> {
                 NavigationDestination(
                   icon: Icon(Icons.auto_stories_outlined),
                   selectedIcon: Icon(Icons.auto_stories_rounded),
-                  label: '记忆',
+                  label: '记忆与人格卡',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.settings_outlined),
