@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:mori_ai/config/model_providers.dart';
-import 'package:mori_ai/config/mori_config.dart';
 import 'package:mori_ai/models/chat_message.dart';
 
 class ChatServiceException implements Exception {
@@ -26,6 +25,7 @@ class ChatService {
     required ModelProvider provider,
     required String apiKey,
     required String model,
+    required String systemPrompt,
   }) async* {
     final key = apiKey.trim();
     if (key.isEmpty) {
@@ -48,7 +48,7 @@ class ChatService {
       ..body = jsonEncode({
         'model': modelId,
         'messages': [
-          {'role': 'system', 'content': MoriConfig.systemPrompt},
+          {'role': 'system', 'content': systemPrompt},
           ...messages.map((message) => message.toApiJson()),
         ],
         'stream': true,

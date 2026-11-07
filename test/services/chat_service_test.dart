@@ -20,6 +20,7 @@ void main() {
         expect(body, contains('"model":"deepseek-chat"'));
         expect(body, contains('"stream":true'));
         expect(body, contains('"thinking":{"type":"disabled"}'));
+        expect(body, contains('你是测试助手。'));
 
         const sse =
             'data: {"choices":[{"delta":{"content":"你"}}]}\n'
@@ -42,6 +43,7 @@ void main() {
             provider: ModelProviderCatalog.deepSeek,
             apiKey: 'test-key',
             model: 'deepseek-chat',
+            systemPrompt: '你是测试助手。',
           )
           .toList();
 
@@ -82,6 +84,7 @@ void main() {
           provider: provider,
           apiKey: 'test-key',
           model: 'some-model',
+          systemPrompt: '你是测试助手。',
         )
         .toList();
 
@@ -99,6 +102,7 @@ void main() {
             provider: ModelProviderCatalog.deepSeek,
             apiKey: '',
             model: 'deepseek-chat',
+            systemPrompt: '你是测试助手。',
           )
           .toList(),
       throwsA(isA<ChatServiceException>()),

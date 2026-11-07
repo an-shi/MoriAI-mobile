@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mori_ai/config/model_providers.dart';
+import 'package:mori_ai/config/mori_config.dart';
+import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/chat_message.dart';
 import 'package:mori_ai/models/model_settings.dart';
 import 'package:mori_ai/services/api_key_store.dart';
+import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/model_store.dart';
+import 'package:mori_ai/widgets/character_avatar.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -39,12 +43,14 @@ class _ChatPageState extends State<ChatPage> {
     _inputController.addListener(_handleInputChanged);
     ModelStore.instance.selection.addListener(_handleModelConfigChanged);
     ModelStore.instance.modelCatalog.addListener(_handleModelConfigChanged);
+    CharacterStore.instance.profile.addListener(_handleCharacterChanged);
   }
 
   @override
   void dispose() {
     ModelStore.instance.selection.removeListener(_handleModelConfigChanged);
     ModelStore.instance.modelCatalog.removeListener(_handleModelConfigChanged);
+    CharacterStore.instance.profile.removeListener(_handleCharacterChanged);
     _inputController
       ..removeListener(_handleInputChanged)
       ..dispose();
@@ -64,6 +70,12 @@ class _ChatPageState extends State<ChatPage> {
     if (!supportsVision && _pendingImage != null) {
       setState(() => _pendingImage = null);
     } else {
+      setState(() {});
+    }
+  }
+
+  void _handleCharacterChanged() {
+    if (mounted) {
       setState(() {});
     }
   }
@@ -209,6 +221,9 @@ class _ChatPageState extends State<ChatPage> {
     }
 
     final model = selection.modelId;
+    final systemPrompt = MoriConfig.buildSystemPrompt(
+      CharacterStore.instance.profile.value,
+    );
     final userMessage = ChatMessage(
       role: ChatRole.user,
       content: text,
@@ -237,6 +252,7 @@ class _ChatPageState extends State<ChatPage> {
         provider: provider,
         apiKey: apiKey,
         model: model,
+        systemPrompt: systemPrompt,
       )) {
         if (!mounted) {
           return;
@@ -257,7 +273,7 @@ class _ChatPageState extends State<ChatPage> {
       }
       if (buffer.isEmpty) {
         setState(() => _messages.removeAt(assistantIndex));
-        _showSnackBar('Mori 没有返回内容，请再试一次。');
+        _showSnackBar('没有返回内容，请再试一次。');
       }
     } on ChatServiceException catch (error) {
       if (!mounted) {
@@ -316,6 +332,10 @@ class _ChatPageState extends State<ChatPage> {
     final canAttachImage = ModelStore.instance.supportsVision(
       ModelStore.instance.selection.value,
     );
+    final character = CharacterStore.instance.profile.value;
+    final greeting = character.type.usesDialogueSettings
+        ? character.greeting.trim()
+        : '';
 
     return Column(
       children: [
@@ -348,6 +368,8 @@ class _ChatPageState extends State<ChatPage> {
         Expanded(
           child: _messages.isEmpty
               ? _WelcomeView(
+                  character: character,
+                  greeting: greeting,
                   suggestions: _suggestions,
                   onSuggestionSelected: (text) => _sendMessage(text),
                 )
@@ -355,8 +377,10 @@ class _ChatPageState extends State<ChatPage> {
                   controller: _scrollController,
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   itemCount: _messages.length,
-                  itemBuilder: (context, index) =>
-                      _ChatBubble(message: _messages[index]),
+                  itemBuilder: (context, index) => _ChatBubble(
+                    message: _messages[index],
+                    character: character,
+                  ),
                 ),
         ),
         if (_pendingImage != null)
@@ -366,6 +390,7 @@ class _ChatPageState extends State<ChatPage> {
           ),
         _Composer(
           controller: _inputController,
+          hintText: '和 ${character.displayName} 说点什么…',
           canSend: (_hasText || _pendingImage != null) && !_isSending,
           canAttachImage: canAttachImage,
           isSending: _isSending,
@@ -419,10 +444,14 @@ class _ModelSetupNotice extends StatelessWidget {
 
 class _WelcomeView extends StatelessWidget {
   const _WelcomeView({
+    required this.character,
+    required this.greeting,
     required this.suggestions,
     required this.onSuggestionSelected,
   });
 
+  final CharacterProfile character;
+  final String greeting;
   final List<String> suggestions;
   final ValueChanged<String> onSuggestionSelected;
 
@@ -441,22 +470,10 @@ class _WelcomeView extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: colors.primaryContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.spa_rounded,
-                      size: 38,
-                      color: colors.onPrimaryContainer,
-                    ),
-                  ),
+                  CharacterAvatar(character: character, size: 80),
                   const SizedBox(height: 20),
                   Text(
-                    '嗨，我是 Mori',
+                    '嗨，我是 ${character.displayName}',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w600,
@@ -464,8 +481,10 @@ class _WelcomeView extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '今天想聊点什么？',
+                    greeting.isNotEmpty ? greeting : '今天想聊点什么？',
                     textAlign: TextAlign.center,
+                    maxLines: 6,
+                    overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colors.onSurfaceVariant,
                     ),
@@ -496,6 +515,7 @@ class _WelcomeView extends StatelessWidget {
 class _Composer extends StatelessWidget {
   const _Composer({
     required this.controller,
+    required this.hintText,
     required this.canSend,
     required this.canAttachImage,
     required this.isSending,
@@ -504,6 +524,7 @@ class _Composer extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final String hintText;
   final bool canSend;
   final bool canAttachImage;
   final bool isSending;
@@ -526,7 +547,7 @@ class _Composer extends StatelessWidget {
               maxLines: 4,
               textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(
-                hintText: '和 Mori 说点什么…',
+                hintText: hintText,
                 filled: true,
                 fillColor: colors.surfaceContainerHighest,
                 contentPadding: const EdgeInsets.symmetric(
@@ -666,9 +687,10 @@ class _AttachmentOption extends StatelessWidget {
 }
 
 class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({required this.message});
+  const _ChatBubble({required this.message, required this.character});
 
   final ChatMessage message;
+  final CharacterProfile character;
 
   @override
   Widget build(BuildContext context) {
@@ -687,15 +709,7 @@ class _ChatBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
-            CircleAvatar(
-              radius: 14,
-              backgroundColor: colors.primaryContainer,
-              child: Icon(
-                Icons.spa_rounded,
-                size: 16,
-                color: colors.onPrimaryContainer,
-              ),
-            ),
+            CharacterAvatar(character: character, size: 28),
             const SizedBox(width: 8),
           ],
           Flexible(
