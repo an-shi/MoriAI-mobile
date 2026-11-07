@@ -1,24 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mori_ai/main.dart';
-import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/services/group_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  setUp(() {
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    await CharacterStore.instance.load();
+    await GroupStore.instance.load();
   });
 
   tearDown(() async {
     SharedPreferences.setMockInitialValues({});
     await CharacterStore.instance.load();
+    await GroupStore.instance.load();
   });
 
   testWidgets('bottom navigation switches between pages', (tester) async {
     await tester.pumpWidget(const MoriApp());
+    await tester.pumpAndSettle();
 
-    expect(find.text('嗨，我是 Mori'), findsOneWidget);
+    expect(find.text('Mori'), findsOneWidget);
+    expect(find.text('暂无消息'), findsOneWidget);
 
     await tester.tap(find.text('记忆与角色卡'));
     await tester.pumpAndSettle();
@@ -32,20 +37,59 @@ void main() {
     expect(find.text('关于 Mori'), findsOneWidget);
   });
 
-  testWidgets('assistant name follows the character card', (tester) async {
+  testWidgets('user profile is on the left and add menu is on the right', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MoriApp());
+    await tester.pumpAndSettle();
+
+    final userX = tester.getCenter(find.byTooltip('个人资料')).dx;
+    final addX = tester.getCenter(find.byTooltip('更多')).dx;
+    expect(userX, lessThan(addX));
+  });
+
+  testWidgets('profile drawer opens personal settings', (tester) async {
+    await tester.pumpWidget(const MoriApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('个人资料'));
+    await tester.pumpAndSettle();
+    expect(find.text('个人信息'), findsOneWidget);
+    expect(tester.getTopLeft(find.byType(Drawer)).dx, lessThan(1));
+
+    await tester.tap(find.text('个人信息'));
+    await tester.pumpAndSettle();
+    expect(find.text('基本资料'), findsOneWidget);
+  });
+
+  testWidgets('plus menu creates a group chat', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await CharacterStore.instance.load();
-    await CharacterStore.instance.save(
-      CharacterProfile(
-        id: CharacterStore.instance.activeCard.id,
-        name: '小森',
-        persona: '温柔、耐心',
-      ),
-    );
+    await CharacterStore.instance.addCard(name: '小森', persona: '安静、耐心。');
 
     await tester.pumpWidget(const MoriApp());
+    await tester.pumpAndSettle();
 
-    expect(find.text('嗨，我是 小森'), findsOneWidget);
-    expect(find.text('和 小森 说点什么…'), findsOneWidget);
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    expect(find.text('新建群聊'), findsOneWidget);
+
+    await tester.tap(find.text('新建群聊'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, '新建群聊'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '测试群聊');
+    final memberTiles = find.byType(CheckboxListTile);
+    expect(memberTiles, findsNWidgets(2));
+    await tester.tap(memberTiles.at(0));
+    await tester.tap(memberTiles.at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+
+    expect(find.text('测试群聊'), findsOneWidget);
+    expect(GroupStore.instance.groups.value, hasLength(1));
   });
 
   testWidgets('memory categories open their own pages', (tester) async {
@@ -58,7 +102,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, '记忆'), findsOneWidget);
 
-    await tester.pageBack();
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('角色卡'));
@@ -79,7 +123,7 @@ void main() {
     expect(find.text('API Key'), findsOneWidget);
     expect(find.text('模型预设'), findsOneWidget);
 
-    await tester.pageBack();
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('外观'));

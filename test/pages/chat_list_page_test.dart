@@ -1,0 +1,73 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mori_ai/models/character_profile.dart';
+import 'package:mori_ai/models/chat_message.dart';
+import 'package:mori_ai/pages/chat_detail_page.dart';
+import 'package:mori_ai/pages/chat_list_page.dart';
+import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/services/chat_history_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await CharacterStore.instance.load();
+  });
+
+  tearDown(() async {
+    SharedPreferences.setMockInitialValues({});
+    await CharacterStore.instance.load();
+  });
+
+  testWidgets('lists conversations and opens the selected chat', (
+    tester,
+  ) async {
+    final secondCard = await CharacterStore.instance.addCard(
+      name: '小森',
+      persona: '安静、耐心。',
+    );
+
+    await ChatHistoryStore.instance.saveFor(CharacterProfile.presetMoriId, [
+      ChatMessage(
+        id: 'mori_1',
+        role: ChatRole.assistant,
+        content: 'Mori 的历史消息',
+        createdAt: DateTime(2026, 11, 8, 9),
+      ),
+    ]);
+    await ChatHistoryStore.instance.saveFor(secondCard.id, [
+      ChatMessage(
+        id: 'xiaosen_1',
+        role: ChatRole.user,
+        content: '小森的最新消息',
+        createdAt: DateTime(2026, 11, 8, 10),
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: ChatListPage())),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mori'), findsOneWidget);
+    expect(find.text('小森'), findsOneWidget);
+    expect(find.text('Mori 的历史消息'), findsOneWidget);
+    expect(find.text('小森的最新消息'), findsOneWidget);
+
+    final xiaosenTop = tester.getTopLeft(find.text('小森')).dy;
+    final moriTop = tester.getTopLeft(find.text('Mori')).dy;
+    expect(xiaosenTop, lessThan(moriTop));
+
+    await tester.tap(find.text('Mori'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ChatDetailPage), findsOneWidget);
+    expect(find.text('Mori 的历史消息'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(ChatListPage), findsOneWidget);
+  });
+}

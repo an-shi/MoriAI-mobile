@@ -31,6 +31,28 @@ void main() {
     expect(message.toApiJson(), {'role': 'user', 'content': '嗨'});
   });
 
+  test('labels group assistant messages with the sender name', () {
+    const message = ChatMessage(
+      role: ChatRole.assistant,
+      content: '早上好。',
+      senderId: 'mori',
+      senderName: 'Mori',
+    );
+
+    expect(message.toApiJson(), {'role': 'assistant', 'content': 'Mori：早上好。'});
+  });
+
+  test('labels group user messages with the user name', () {
+    const message = ChatMessage(
+      role: ChatRole.user,
+      content: '今天吃什么？',
+      senderId: 'user',
+      senderName: '小森',
+    );
+
+    expect(message.toApiJson(), {'role': 'user', 'content': '小森：今天吃什么？'});
+  });
+
   test('sends only the image part when there is no text', () {
     final message = ChatMessage(
       role: ChatRole.user,

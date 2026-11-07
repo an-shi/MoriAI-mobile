@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mori_ai/models/character_profile.dart';
+import 'package:mori_ai/models/chat_message.dart';
 import 'package:mori_ai/models/model_option.dart';
 import 'package:mori_ai/models/model_settings.dart';
 import 'package:mori_ai/pages/chat_page.dart';
+import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,5 +58,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byTooltip('发送图片'), findsNothing);
+  });
+
+  testWidgets('restores persisted chat history for the active character', (
+    tester,
+  ) async {
+    await ChatHistoryStore.instance.saveFor(CharacterProfile.presetMoriId, [
+      ChatMessage(
+        id: 'history_1',
+        role: ChatRole.user,
+        content: '这是上次的聊天记录',
+        createdAt: DateTime(2026, 11, 8, 10, 30),
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: ChatPage())),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('这是上次的聊天记录'), findsOneWidget);
+    expect(find.text('发消息…'), findsOneWidget);
   });
 }
