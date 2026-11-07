@@ -131,12 +131,23 @@ void main() {
 
     await tester.tap(find.text('新建角色卡'));
     await tester.pumpAndSettle();
-    expect(find.text('编辑角色卡'), findsOneWidget);
-    expect(CharacterStore.instance.cards.value, hasLength(2));
+    expect(find.text('新建角色卡'), findsOneWidget);
+    expect(CharacterStore.instance.cards.value, hasLength(1));
 
     await tester.pageBack();
     await tester.pumpAndSettle();
+    expect(CharacterStore.instance.cards.value, hasLength(1));
 
+    await tester.tap(find.text('新建角色卡'));
+    await tester.pumpAndSettle();
+    expect(find.text('新建角色卡'), findsOneWidget);
+    await tester.enterText(fieldWithLabel('名称'), '第二个角色');
+    await tester.tap(find.text('保存角色卡'));
+    await tester.pumpAndSettle();
+
+    expect(CharacterStore.instance.cards.value, hasLength(2));
+    expect(CharacterStore.instance.activeCard.name, '第二个角色');
+    expect(find.text('角色卡已创建'), findsOneWidget);
     expect(find.byIcon(Icons.delete_outline_rounded), findsNWidgets(2));
 
     await tester.tap(find.byTooltip('使用这张角色卡'));

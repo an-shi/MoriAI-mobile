@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/services/avatar_store.dart';
+import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 管理多张角色卡、当前使用的角色以及卡片内容。
@@ -129,21 +130,37 @@ class CharacterStore {
     await _persist(cards.value, cardId);
   }
 
+  /// 为尚未保存的新角色卡生成一个不会与现有卡片冲突的 ID。
+  String createCardId() => _newCardId();
+
+  /// 生成一个建议的新角色卡名称。
+  String nextCardName() => _nextCardName(cards.value);
+
+  /// 保存一张全新的角色卡。调用前应先在编辑页完成内容填写。
+  Future<CharacterProfile> createCard(CharacterProfile next) async {
+    final normalized = next.normalized();
+    if (normalized.id.isEmpty) {
+      throw ArgumentError.value(next.id, 'id', 'Card id cannot be empty');
+    }
+    if (cards.value.any((card) => card.id == normalized.id)) {
+      throw StateError('Character card already exists');
+    }
+
+    final nextCards = [...cards.value, normalized];
+    await _persist(nextCards, normalized.id);
+    return normalized;
+  }
+
   Future<CharacterProfile> addCard({String? name, String? persona}) async {
-    final nextCards = [...cards.value];
     final card = CharacterProfile(
-      id: _newCardId(),
-      name: (name?.trim().isNotEmpty ?? false)
-          ? name!.trim()
-          : _nextCardName(nextCards),
+      id: createCardId(),
+      name: (name?.trim().isNotEmpty ?? false) ? name!.trim() : nextCardName(),
       persona: (persona?.trim().isEmpty ?? true)
           ? CharacterProfile.defaultPersona
           : persona!.trim(),
     ).normalized();
 
-    nextCards.add(card);
-    await _persist(nextCards, card.id);
-    return card;
+    return createCard(card);
   }
 
   Future<void> deleteCard(String cardId) async {
@@ -175,6 +192,8 @@ class CharacterStore {
     if (avatar != null && avatar.isNotEmpty) {
       await AvatarStore.instance.deleteAvatar(avatar);
     }
+
+    await ChatHistoryStore.instance.deleteForCard(cardId);
   }
 
   Future<void> _persist(

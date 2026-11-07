@@ -7,9 +7,16 @@ import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 
 class CharacterCardEditPage extends StatefulWidget {
-  const CharacterCardEditPage({super.key, required this.cardId});
+  const CharacterCardEditPage({
+    super.key,
+    required this.cardId,
+    this.isNew = false,
+    this.initialName = '',
+  });
 
   final String cardId;
+  final bool isNew;
+  final String initialName;
 
   @override
   State<CharacterCardEditPage> createState() => _CharacterCardEditPageState();
@@ -43,30 +50,42 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
   @override
   void initState() {
     super.initState();
-    final card =
-        CharacterStore.instance.cardById(widget.cardId) ??
-        CharacterProfile.presetMori;
-    _type = card.type;
-    _nameController = TextEditingController(text: card.name);
-    _taglineController = TextEditingController(text: card.tagline);
-    _personaController = TextEditingController(text: card.persona);
-    _personalityController = TextEditingController(text: card.personality);
-    _speakingStyleController = TextEditingController(text: card.speakingStyle);
-    _backgroundController = TextEditingController(text: card.background);
-    _relationshipController = TextEditingController(text: card.relationship);
-    _likesController = TextEditingController(text: card.likes);
-    _dislikesController = TextEditingController(text: card.dislikes);
-    _boundariesController = TextEditingController(text: card.boundaries);
-    _scenarioController = TextEditingController(text: card.scenario);
-    _greetingController = TextEditingController(text: card.greeting);
+    final card = widget.isNew
+        ? null
+        : CharacterStore.instance.cardById(widget.cardId);
+    _type = card?.type ?? CharacterCardType.simple;
+    _nameController = TextEditingController(
+      text: card?.name ?? widget.initialName,
+    );
+    _taglineController = TextEditingController(text: card?.tagline ?? '');
+    _personaController = TextEditingController(text: card?.persona ?? '');
+    _personalityController = TextEditingController(
+      text: card?.personality ?? '',
+    );
+    _speakingStyleController = TextEditingController(
+      text: card?.speakingStyle ?? '',
+    );
+    _backgroundController = TextEditingController(text: card?.background ?? '');
+    _relationshipController = TextEditingController(
+      text: card?.relationship ?? '',
+    );
+    _likesController = TextEditingController(text: card?.likes ?? '');
+    _dislikesController = TextEditingController(text: card?.dislikes ?? '');
+    _boundariesController = TextEditingController(text: card?.boundaries ?? '');
+    _scenarioController = TextEditingController(text: card?.scenario ?? '');
+    _greetingController = TextEditingController(text: card?.greeting ?? '');
     _exampleDialogueController = TextEditingController(
-      text: card.exampleDialogue,
+      text: card?.exampleDialogue ?? '',
     );
-    _systemPromptController = TextEditingController(text: card.systemPrompt);
+    _systemPromptController = TextEditingController(
+      text: card?.systemPrompt ?? '',
+    );
     _postHistoryController = TextEditingController(
-      text: card.postHistoryInstructions,
+      text: card?.postHistoryInstructions ?? '',
     );
-    _rawDefinitionController = TextEditingController(text: card.rawDefinition);
+    _rawDefinitionController = TextEditingController(
+      text: card?.rawDefinition ?? '',
+    );
   }
 
   @override
@@ -109,29 +128,33 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
         avatar = '';
       }
 
-      await CharacterStore.instance.save(
-        CharacterProfile(
-          id: widget.cardId,
-          type: _type,
-          avatar: avatar,
-          name: _nameController.text,
-          tagline: _taglineController.text,
-          persona: _personaController.text,
-          personality: _personalityController.text,
-          speakingStyle: _speakingStyleController.text,
-          background: _backgroundController.text,
-          relationship: _relationshipController.text,
-          likes: _likesController.text,
-          dislikes: _dislikesController.text,
-          boundaries: _boundariesController.text,
-          scenario: _scenarioController.text,
-          greeting: _greetingController.text,
-          exampleDialogue: _exampleDialogueController.text,
-          systemPrompt: _systemPromptController.text,
-          postHistoryInstructions: _postHistoryController.text,
-          rawDefinition: _rawDefinitionController.text,
-        ),
+      final profile = CharacterProfile(
+        id: widget.cardId,
+        type: _type,
+        avatar: avatar,
+        name: _nameController.text,
+        tagline: _taglineController.text,
+        persona: _personaController.text,
+        personality: _personalityController.text,
+        speakingStyle: _speakingStyleController.text,
+        background: _backgroundController.text,
+        relationship: _relationshipController.text,
+        likes: _likesController.text,
+        dislikes: _dislikesController.text,
+        boundaries: _boundariesController.text,
+        scenario: _scenarioController.text,
+        greeting: _greetingController.text,
+        exampleDialogue: _exampleDialogueController.text,
+        systemPrompt: _systemPromptController.text,
+        postHistoryInstructions: _postHistoryController.text,
+        rawDefinition: _rawDefinitionController.text,
       );
+
+      if (widget.isNew) {
+        await CharacterStore.instance.createCard(profile);
+      } else {
+        await CharacterStore.instance.save(profile);
+      }
 
       if (previousAvatar.isNotEmpty && previousAvatar != avatar) {
         await AvatarStore.instance.deleteAvatar(previousAvatar);
@@ -264,11 +287,21 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final card = CharacterStore.instance.cardById(widget.cardId);
+    final pageTitle = widget.isNew ? '新建角色卡' : '编辑角色卡';
+    final storedCard = CharacterStore.instance.cardById(widget.cardId);
+    final card =
+        storedCard ??
+        (widget.isNew
+            ? CharacterProfile(
+                id: widget.cardId,
+                type: _type,
+                name: _nameController.text,
+              )
+            : null);
 
     if (card == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('编辑角色卡')),
+        appBar: AppBar(title: Text(pageTitle)),
         body: const Center(child: Text('角色卡不存在或已被删除')),
       );
     }
@@ -278,7 +311,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
         (!_removeAvatar && card.avatar.isNotEmpty);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('编辑角色卡')),
+      appBar: AppBar(title: Text(pageTitle)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [

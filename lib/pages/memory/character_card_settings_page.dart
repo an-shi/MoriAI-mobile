@@ -35,22 +35,29 @@ class _CharacterCardSettingsPageState extends State<CharacterCardSettingsPage> {
       return;
     }
 
+    final cardId = CharacterStore.instance.createCardId();
+    final initialName = CharacterStore.instance.nextCardName();
+
     setState(() => _busy = true);
-    CharacterProfile? card;
+    bool? saved;
     try {
-      card = await CharacterStore.instance.addCard();
-    } catch (_) {
-      if (mounted) {
-        _showSnackBar('新建角色卡失败，请重试');
-      }
+      saved = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) => CharacterCardEditPage(
+            cardId: cardId,
+            isNew: true,
+            initialName: initialName,
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _busy = false);
       }
     }
 
-    if (card != null && mounted) {
-      await _openEditor(card);
+    if (saved == true && mounted) {
+      _showSnackBar('角色卡已创建');
     }
   }
 
@@ -200,7 +207,7 @@ class _CharacterCardSettingsPageState extends State<CharacterCardSettingsPage> {
                         color: colors.primary,
                       ),
                       title: const Text('新建角色卡'),
-                      subtitle: const Text('创建后会进入编辑页面'),
+                      subtitle: const Text('保存后才会添加到角色卡列表'),
                       onTap: _addCard,
                     ),
                   ],

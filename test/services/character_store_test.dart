@@ -57,6 +57,21 @@ void main() {
     expect(CharacterStore.instance.activeCard.avatar, isEmpty);
   });
 
+  test('creates a card only when requested', () async {
+    await CharacterStore.instance.load();
+    final id = CharacterStore.instance.createCardId();
+
+    expect(CharacterStore.instance.cards.value, hasLength(1));
+
+    await CharacterStore.instance.createCard(
+      CharacterProfile(id: id, name: '第二个角色'),
+    );
+
+    expect(CharacterStore.instance.cards.value, hasLength(2));
+    expect(CharacterStore.instance.activeCard.id, id);
+    expect(CharacterStore.instance.activeCard.name, '第二个角色');
+  });
+
   test('cannot delete the only remaining character card', () async {
     await CharacterStore.instance.load();
 
