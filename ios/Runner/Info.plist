@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Mori 需要使用相机拍摄要发送给模型的图片。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Mori 需要访问相册以选择要发送给模型的图片。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

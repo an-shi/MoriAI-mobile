@@ -2,11 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:mori_ai/config/deepseek_config.dart';
+import 'package:mori_ai/config/model_providers.dart';
+import 'package:mori_ai/config/mori_config.dart';
 import 'package:mori_ai/models/chat_message.dart';
 
-class DeepSeekException implements Exception {
-  const DeepSeekException(this.message);
+class ChatServiceException implements Exception {
+  const ChatServiceException(this.message);
 
   final String message;
 
@@ -14,46 +15,47 @@ class DeepSeekException implements Exception {
   String toString() => message;
 }
 
-class DeepSeekService {
-  DeepSeekService({http.Client? client}) : _client = client ?? http.Client();
+/// 基于 OpenAI 兼容协议的大模型流式对话服务。
+class ChatService {
+  ChatService({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
 
   Stream<String> streamChat(
     List<ChatMessage> messages, {
+    required ModelProvider provider,
     required String apiKey,
     required String model,
   }) async* {
     final key = apiKey.trim();
     if (key.isEmpty) {
-      throw const DeepSeekException('尚未配置 DeepSeek API Key，请先在「设置」中填写。');
+      throw ChatServiceException(
+        '尚未配置 ${provider.name} API Key，请先在「设置 > 模型」中填写。',
+      );
     }
 
     final modelId = model.trim();
     if (modelId.isEmpty) {
-      throw const DeepSeekException('尚未选择模型，请先在「设置」中选择。');
+      throw const ChatServiceException('尚未选择模型，请先在「设置 > 模型」中选择。');
     }
 
-    final request =
-        http.Request(
-            'POST',
-            Uri.parse('${DeepSeekConfig.baseUrl}/chat/completions'),
-          )
-          ..headers.addAll({
-            'Accept': 'text/event-stream',
-            'Authorization': 'Bearer $key',
-            'Content-Type': 'application/json',
-          })
-          ..body = jsonEncode({
-            'model': modelId,
-            'messages': [
-              {'role': 'system', 'content': DeepSeekConfig.systemPrompt},
-              ...messages.map((message) => message.toApiJson()),
-            ],
-            'stream': true,
-            // 关闭深度思考，缩短首字延迟，适合日常陪伴聊天。
-            'thinking': {'type': 'disabled'},
-          });
+    final request = http.Request('POST', provider.chatUri)
+      ..headers.addAll({
+        'Accept': 'text/event-stream',
+        'Authorization': 'Bearer $key',
+        'Content-Type': 'application/json',
+      })
+      ..body = jsonEncode({
+        'model': modelId,
+        'messages': [
+          {'role': 'system', 'content': MoriConfig.systemPrompt},
+          ...messages.map((message) => message.toApiJson()),
+        ],
+        'stream': true,
+        if (provider.supportsThinkingToggle)
+          // 关闭深度思考，缩短首字延迟，适合日常陪伴聊天。
+          'thinking': {'type': 'disabled'},
+      });
 
     final http.StreamedResponse response;
     try {
@@ -61,14 +63,16 @@ class DeepSeekService {
           .send(request)
           .timeout(const Duration(seconds: 30));
     } on TimeoutException {
-      throw const DeepSeekException('连接 DeepSeek 超时，请检查网络后重试。');
+      throw ChatServiceException('连接 ${provider.name} 超时，请检查网络后重试。');
     } on http.ClientException catch (error) {
-      throw DeepSeekException('无法连接 DeepSeek：${error.message}');
+      throw ChatServiceException('无法连接 ${provider.name}：${error.message}');
     }
 
     if (response.statusCode != 200) {
       final body = await response.stream.bytesToString();
-      throw DeepSeekException(_errorMessage(response.statusCode, body));
+      throw ChatServiceException(
+        _errorMessage(provider, response.statusCode, body),
+      );
     }
 
     final lines = response.stream
@@ -92,7 +96,7 @@ class DeepSeekService {
         }
       }
     } on TimeoutException {
-      throw const DeepSeekException('DeepSeek 响应超时，请稍后重试。');
+      throw ChatServiceException('${provider.name} 响应超时，请稍后重试。');
     }
   }
 
@@ -137,7 +141,7 @@ class DeepSeekService {
     }
   }
 
-  String _errorMessage(int statusCode, String body) {
+  String _errorMessage(ModelProvider provider, int statusCode, String body) {
     var detail = '';
     try {
       final json = jsonDecode(body);
@@ -158,8 +162,8 @@ class DeepSeekService {
       403 => '没有访问权限',
       422 => '请求参数错误',
       429 => '请求太频繁，请稍后再试',
-      500 || 503 => 'DeepSeek 服务暂时不可用',
-      _ => 'DeepSeek 请求失败（HTTP $statusCode）',
+      500 || 503 => '${provider.name} 服务暂时不可用',
+      _ => '${provider.name} 请求失败（HTTP $statusCode）',
     };
 
     return detail.isEmpty ? reason : '$reason：$detail';
