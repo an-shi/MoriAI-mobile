@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mori_ai/pages/home_page.dart';
 import 'package:mori_ai/services/api_key_store.dart';
+import 'package:mori_ai/services/avatar_store.dart';
+import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/theme_store.dart';
 
@@ -9,6 +11,8 @@ Future<void> main() async {
   await Future.wait([
     ApiKeyStore.instance.load(),
     ModelStore.instance.load(),
+    CharacterStore.instance.load(),
+    AvatarStore.instance.load(),
     ThemeStore.instance.load(),
   ]);
   runApp(const MoriApp());
