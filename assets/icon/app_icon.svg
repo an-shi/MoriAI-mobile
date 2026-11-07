@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="512" height="512" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#A9DFC5"/>
+
+  <!-- Background sparkles -->
+  <path d="M92 104h20v20h20v20h-20v20H92v-20H72v-20h20z"
+        fill="#F8F6E9"/>
+  <path d="M415 210h14v14h14v14h-14v14h-14v-14h-14v-14h14z"
+        fill="#F8F6E9"/>
+
+  <!-- Chat bubble -->
+  <path d="M350 64h90v18h18v92h-18v18h-46v24h-18v-24h-26v-18h-18V82h18z"
+        fill="#F8F6E9" stroke="#25343B" stroke-width="8"
+        stroke-linejoin="miter"/>
+  <path d="M380 105h18v-10h18v10h18v18h-18v18h-18v-18h-18z"
+        fill="#72C9A5"/>
+
+  <!-- Sprout -->
+  <path d="M245 166v-42h-18v-18h18V88h18v18h18v18h-18v42z"
+        fill="#398D71" stroke="#25343B" stroke-width="6"/>
+  <path d="M245 105h-36V87h36V69h18v18h36v18h-36v18h-18z"
+        fill="#80CE9F" stroke="#25343B" stroke-width="6"/>
+  <path d="M245 123h18v55h-18z" fill="#398D71"/>
+
+  <!-- Robot body -->
+  <path d="M142 224h18v-18h192v18h18v18h18v174h-18v18h-18v18H160v-18h-18v-18h-18V242h18z"
+        fill="#F7F3E5" stroke="#25343B" stroke-width="10"
+        stroke-linejoin="miter"/>
+
+  <!-- Face screen -->
+  <path d="M170 270h18v-18h136v18h18v104h-18v18H188v-18h-18z"
+        fill="#26343F"/>
+
+  <!-- Eyes -->
+  <path d="M211 294h18v46h-18zM283 294h18v46h-18z"
+        fill="#C5F5DD"/>
+
+  <!-- Small cheek pixels -->
+  <path d="M190 350h12v12h-12zM310 350h12v12h-12z"
+        fill="#72C9A5"/>
+
+  <!-- Feet -->
+  <path d="M160 422h66v28h-66zM286 422h66v28h-66z"
+        fill="#F7F3E5" stroke="#25343B" stroke-width="8"/>
+
+  <!-- Ground -->
+  <path d="M92 460h328v18H92z" fill="#72C9A5"/>
+</svg>
