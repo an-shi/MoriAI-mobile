@@ -1,10 +1,21 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:mori_ai/models/chat_conversation_summary.dart';
 import 'package:mori_ai/models/chat_message.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class ChatHistoryAppendEvent {
+  const ChatHistoryAppendEvent({
+    required this.conversationId,
+    required this.messages,
+  });
+
+  final String conversationId;
+  final List<ChatMessage> messages;
+}
 
 /// 按角色卡保存聊天记录。
 ///
@@ -15,6 +26,13 @@ class ChatHistoryStore {
   static final ChatHistoryStore instance = ChatHistoryStore._();
 
   static const _keyPrefix = 'chat_history_v1_';
+
+  /// 会话聊天记录被整体删除时更新为对应会话 ID，供已打开的聊天页清空界面。
+  final ValueNotifier<String> clearedConversation = ValueNotifier<String>('');
+
+  /// 外部服务（如自动消息）向会话追加消息后发出事件。
+  final ValueNotifier<ChatHistoryAppendEvent?> messageAppended =
+      ValueNotifier<ChatHistoryAppendEvent?>(null);
 
   Directory? _imagesRoot;
 
@@ -176,18 +194,65 @@ class ChatHistoryStore {
     }
   }
 
-  Future<void> deleteForCard(String cardId) async {
+  Future<void> deleteForCard(String cardId) => deleteConversation(cardId);
+
+  /// 通知已打开的聊天页和会话列表：外部服务已经写入新消息。
+  void notifyExternalMessages(
+    String conversationId,
+    List<ChatMessage> messages,
+  ) {
+    if (messages.isEmpty) {
+      return;
+    }
+    messageAppended.value = ChatHistoryAppendEvent(
+      conversationId: conversationId,
+      messages: List<ChatMessage>.unmodifiable(messages),
+    );
+  }
+
+  /// 删除一个会话的全部聊天记录和聊天图片。
+  Future<void> deleteConversation(String conversationId) async {
     try {
       final preferences = await SharedPreferences.getInstance();
-      await preferences.remove(_prefsKey(cardId));
+      await preferences.remove(_prefsKey(conversationId));
     } catch (_) {
       // 忽略本地存储清理失败。
     }
 
+    // 先置空再赋值，确保连续删除同一个会话时也能通知监听者。
+    clearedConversation.value = '';
+    clearedConversation.value = conversationId;
+
     try {
-      final directory = await _cardImageDirectory(cardId, create: false);
+      final directory = await _cardImageDirectory(
+        conversationId,
+        create: false,
+      );
       if (directory != null && await directory.exists()) {
         await directory.delete(recursive: true);
+      }
+    } catch (_) {
+      // 忽略聊天图片清理失败。
+    }
+  }
+
+  /// 删除单条消息对应的聊天图片文件。
+  Future<void> deleteImageFor(String conversationId, String messageId) async {
+    if (messageId.isEmpty) {
+      return;
+    }
+    try {
+      final directory = await _cardImageDirectory(
+        conversationId,
+        create: false,
+      );
+      if (directory == null) {
+        return;
+      }
+      final safeId = messageId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      final file = File('${directory.path}/$safeId.jpg');
+      if (await file.exists()) {
+        await file.delete();
       }
     } catch (_) {
       // 忽略聊天图片清理失败。

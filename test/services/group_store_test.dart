@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mori_ai/models/group_reply_mode.dart';
 import 'package:mori_ai/services/group_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -39,13 +40,24 @@ void main() {
     );
 
     await GroupStore.instance.updateGroup(
-      group.copyWith(name: '新群名', memberIds: const ['mori', 'card_3']),
+      group.copyWith(
+        name: '新群名',
+        memberIds: const ['mori', 'card_3'],
+        replyMode: GroupReplyMode.singleRandom,
+      ),
     );
 
     final updated = GroupStore.instance.groupById(group.id);
     expect(updated, isNotNull);
     expect(updated!.name, '新群名');
     expect(updated.memberIds, ['mori', 'card_3']);
+    expect(updated.replyMode, GroupReplyMode.singleRandom);
+
+    await GroupStore.instance.load();
+    expect(
+      GroupStore.instance.groupById(group.id)?.replyMode,
+      GroupReplyMode.singleRandom,
+    );
   });
 
   test('requires at least two unique members', () async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mori_ai/config/model_providers.dart';
@@ -8,18 +10,22 @@ import 'package:mori_ai/models/group_profile.dart';
 import 'package:mori_ai/services/api_key_store.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
+import 'package:mori_ai/services/chat_queue_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/model_store.dart';
+import 'package:mori_ai/services/proactive_message_service.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
+import 'package:mori_ai/utils/chat_queue_utils.dart';
 import 'package:mori_ai/utils/chat_text_utils.dart';
 import 'package:mori_ai/utils/group_chat_utils.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/user_avatar.dart';
 
 class ChatPage extends StatefulWidget {
-  const ChatPage({super.key, this.group});
+  const ChatPage({super.key, this.group, this.characterId});
 
   final GroupProfile? group;
+  final String? characterId;
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -41,16 +47,19 @@ class _ChatPageState extends State<ChatPage> {
 
   bool _isSending = false;
   bool _hasText = false;
+  bool _stopRequested = false;
   ChatImage? _pendingImage;
+  final _queuedUserMessages = <ChatMessage>[];
+  final _pendingExternalMessages = <ChatMessage>[];
+  String? _activeTurnMessageId;
+  Completer<void>? _activeStopCompleter;
   String _loadedConversationId = '';
-  String? _pendingHistoryConversationId;
   int _historyLoadToken = 0;
   int _messageSequence = 0;
 
   bool get _isGroup => widget.group != null;
 
-  String get _conversationId =>
-      widget.group?.id ?? CharacterStore.instance.activeCard.id;
+  String get _conversationId => widget.group?.id ?? widget.characterId ?? '';
 
   List<CharacterProfile> get _groupMembers {
     final group = widget.group;
@@ -74,14 +83,14 @@ class _ChatPageState extends State<ChatPage> {
     _inputController.addListener(_handleInputChanged);
     ModelStore.instance.selection.addListener(_handleModelConfigChanged);
     ModelStore.instance.modelCatalog.addListener(_handleModelConfigChanged);
-    CharacterStore.instance.profile.addListener(_handleCharacterChanged);
     CharacterStore.instance.cards.addListener(_handleCharactersChanged);
     UserProfileStore.instance.profile.addListener(_handleUserProfileChanged);
-    if (!_isGroup) {
-      CharacterStore.instance.activeCardId.addListener(
-        _handleActiveCardChanged,
-      );
-    }
+    ChatHistoryStore.instance.clearedConversation.addListener(
+      _handleHistoryCleared,
+    );
+    ChatHistoryStore.instance.messageAppended.addListener(
+      _handleExternalMessages,
+    );
     _loadHistory(_conversationId);
   }
 
@@ -89,14 +98,18 @@ class _ChatPageState extends State<ChatPage> {
   void dispose() {
     ModelStore.instance.selection.removeListener(_handleModelConfigChanged);
     ModelStore.instance.modelCatalog.removeListener(_handleModelConfigChanged);
-    CharacterStore.instance.profile.removeListener(_handleCharacterChanged);
     CharacterStore.instance.cards.removeListener(_handleCharactersChanged);
     UserProfileStore.instance.profile.removeListener(_handleUserProfileChanged);
-    if (!_isGroup) {
-      CharacterStore.instance.activeCardId.removeListener(
-        _handleActiveCardChanged,
-      );
-    }
+    ChatHistoryStore.instance.clearedConversation.removeListener(
+      _handleHistoryCleared,
+    );
+    ChatHistoryStore.instance.messageAppended.removeListener(
+      _handleExternalMessages,
+    );
+    ProactiveMessageService.instance.setConversationBusy(
+      _conversationId,
+      false,
+    );
     _inputController
       ..removeListener(_handleInputChanged)
       ..dispose();
@@ -113,7 +126,7 @@ class _ChatPageState extends State<ChatPage> {
     if (!mounted || token != _historyLoadToken) {
       return;
     }
-    if (!_isGroup && CharacterStore.instance.activeCard.id != conversationId) {
+    if (_conversationId != conversationId) {
       return;
     }
 
@@ -121,15 +134,79 @@ class _ChatPageState extends State<ChatPage> {
       for (final message in loadedMessages)
         _isGroup ? _normalizeGroupMessage(message) : message,
     ];
+    final knownIds = {for (final message in messages) message.id};
+    for (final message in _pendingExternalMessages) {
+      if (knownIds.add(message.id)) {
+        messages.add(message);
+      }
+    }
+    _pendingExternalMessages.clear();
+    final loadedQueueIds = await ChatQueueStore.instance.loadFor(
+      conversationId,
+    );
+    if (!mounted || token != _historyLoadToken) {
+      return;
+    }
+    if (_conversationId != conversationId) {
+      return;
+    }
+    final pendingMessages = pendingQueueMessages(messages, loadedQueueIds);
+    await ChatQueueStore.instance.saveFor(conversationId, [
+      for (final message in pendingMessages) message.id,
+    ]);
+    if (!mounted || token != _historyLoadToken) {
+      return;
+    }
 
     setState(() {
       _messages
         ..clear()
         ..addAll(messages);
+      _queuedUserMessages
+        ..clear()
+        ..addAll(pendingMessages);
+      _activeTurnMessageId = null;
       _loadedConversationId = conversationId;
       _pendingImage = null;
     });
     _scrollToLatest();
+    if (pendingMessages.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _resumePendingQueue(conversationId);
+      });
+    }
+  }
+
+  Future<void> _persistQueue(String conversationId) {
+    return ChatQueueStore.instance.saveFor(conversationId, [
+      for (final message in _queuedUserMessages) message.id,
+    ]);
+  }
+
+  Future<void> _resumePendingQueue(String conversationId) async {
+    if (!mounted || _isSending || _queuedUserMessages.isEmpty) {
+      return;
+    }
+    if (_conversationId != conversationId) {
+      return;
+    }
+
+    final selection = ModelStore.instance.selection.value;
+    final provider =
+        ModelProviderCatalog.byId(selection.providerId) ??
+        ModelProviderCatalog.defaultProvider;
+    final apiKey = ApiKeyStore.instance.keyFor(provider.id).value?.trim() ?? '';
+    if (!selection.hasModel || apiKey.isEmpty) {
+      return;
+    }
+
+    setState(() => _isSending = true);
+    ProactiveMessageService.instance.setConversationBusy(conversationId, true);
+    try {
+      await _drainQueue(conversationId);
+    } finally {
+      await _finishDrain(conversationId);
+    }
   }
 
   ChatMessage _normalizeGroupMessage(ChatMessage message) {
@@ -148,23 +225,61 @@ class _ChatPageState extends State<ChatPage> {
     return message.copyWith(senderName: senderName, content: content);
   }
 
-  void _handleActiveCardChanged() {
-    if (_isGroup) {
-      return;
-    }
-
-    final cardId = CharacterStore.instance.activeCard.id;
-    if (_isSending) {
-      _pendingHistoryConversationId = cardId;
-      return;
-    }
-    _loadHistory(cardId);
-  }
-
   void _handleCharactersChanged() {
-    if (mounted && _isGroup) {
+    if (mounted) {
       setState(() {});
     }
+  }
+
+  void _handleHistoryCleared() {
+    final clearedId = ChatHistoryStore.instance.clearedConversation.value;
+    if (!mounted || clearedId != _conversationId) {
+      return;
+    }
+
+    _stopRequested = true;
+    _historyLoadToken++;
+    _pendingExternalMessages.clear();
+    final stopCompleter = _activeStopCompleter;
+    if (stopCompleter != null && !stopCompleter.isCompleted) {
+      stopCompleter.complete();
+    }
+    _queuedUserMessages.clear();
+    setState(() {
+      _messages.clear();
+      _activeTurnMessageId = null;
+    });
+  }
+
+  void _handleExternalMessages() {
+    final event = ChatHistoryStore.instance.messageAppended.value;
+    if (!mounted || event == null || event.conversationId != _conversationId) {
+      return;
+    }
+
+    if (_loadedConversationId != _conversationId) {
+      final pendingIds = {
+        for (final message in _pendingExternalMessages) message.id,
+      };
+      for (final message in event.messages) {
+        if (pendingIds.add(message.id)) {
+          _pendingExternalMessages.add(message);
+        }
+      }
+      return;
+    }
+
+    final existingIds = {for (final message in _messages) message.id};
+    final additions = [
+      for (final message in event.messages)
+        if (existingIds.add(message.id)) message,
+    ];
+    if (additions.isEmpty) {
+      return;
+    }
+
+    setState(() => _messages.addAll(additions));
+    _scrollToLatest(animate: true);
   }
 
   void _handleUserProfileChanged() {
@@ -178,6 +293,66 @@ class _ChatPageState extends State<ChatPage> {
       conversationId,
       List<ChatMessage>.unmodifiable(_messages),
     );
+  }
+
+  Future<void> _showMessageActions(ChatMessage message) async {
+    final colors = Theme.of(context).colorScheme;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                key: const Key('delete-message-action'),
+                leading: Icon(
+                  Icons.delete_outline_rounded,
+                  color: colors.error,
+                ),
+                title: Text('删除消息', style: TextStyle(color: colors.error)),
+                onTap: () => Navigator.of(sheetContext).pop('delete'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (action == 'delete' && mounted) {
+      await _deleteMessage(message);
+    }
+  }
+
+  Future<void> _deleteMessage(ChatMessage message) async {
+    final index = _messages.indexWhere((item) => item.id == message.id);
+    if (index < 0) {
+      return;
+    }
+
+    if (_isSending && message.id == _activeTurnMessageId) {
+      await _stopReply();
+      if (!mounted) {
+        return;
+      }
+    }
+
+    setState(() {
+      _messages.removeWhere((item) => item.id == message.id);
+      _queuedUserMessages.removeWhere((item) => item.id == message.id);
+    });
+    if (message.image != null) {
+      await ChatHistoryStore.instance.deleteImageFor(
+        _conversationId,
+        message.id,
+      );
+    }
+    await _saveHistory(_conversationId);
+    await _persistQueue(_conversationId);
+    if (mounted) {
+      _showSnackBar('消息已删除');
+    }
   }
 
   String _newMessageId() {
@@ -196,12 +371,6 @@ class _ChatPageState extends State<ChatPage> {
     if (!supportsVision && _pendingImage != null) {
       setState(() => _pendingImage = null);
     } else {
-      setState(() {});
-    }
-  }
-
-  void _handleCharacterChanged() {
-    if (mounted) {
       setState(() {});
     }
   }
@@ -339,7 +508,7 @@ AI 群成员有：$memberNames。
 直接输出回复正文，不要在正文开头添加任何人的名字或角色名前缀，界面会自动显示发送者名称。''';
   }
 
-  Future<bool> _streamReply({
+  Future<ChatMessage?> _streamReply({
     required CharacterProfile responder,
     required String conversationId,
     required ModelProvider provider,
@@ -347,10 +516,11 @@ AI 群成员有：$memberNames。
     required String model,
     required String systemPrompt,
     required bool showSender,
+    required List<ChatMessage> roundHistory,
   }) async {
     final history = showSender
-        ? buildGroupRequestHistory(_messages, responderId: responder.id)
-        : List<ChatMessage>.of(_messages);
+        ? buildGroupRequestHistory(roundHistory, responderId: responder.id)
+        : List<ChatMessage>.of(roundHistory);
     final assistantMessage = ChatMessage(
       id: _newMessageId(),
       role: ChatRole.assistant,
@@ -363,9 +533,13 @@ AI 群成员有：$memberNames。
     setState(() => _messages.add(assistantMessage));
     _scrollToLatest(animate: true);
 
-    final assistantIndex = _messages.length - 1;
+    final assistantId = assistantMessage.id;
     final buffer = StringBuffer();
     final prefix = showSender ? '${responder.displayName}：' : '';
+
+    int indexOfAssistant() {
+      return _messages.indexWhere((message) => message.id == assistantId);
+    }
 
     String visibleContent() {
       final raw = buffer.toString();
@@ -374,74 +548,122 @@ AI 群成员有：$memberNames。
           : raw;
     }
 
-    try {
-      await for (final chunk in _service.streamChat(
+    final stopCompleter = Completer<void>();
+    _activeStopCompleter = stopCompleter;
+    final iterator = StreamIterator<String>(
+      _service.streamChat(
         history,
         provider: provider,
         apiKey: apiKey,
         model: model,
         systemPrompt: systemPrompt,
-      )) {
+      ),
+    );
+
+    try {
+      var stopped = false;
+      while (true) {
+        final hasNext = await Future.any<bool>([
+          iterator.moveNext(),
+          stopCompleter.future.then((_) => false),
+        ]);
         if (!mounted) {
-          return false;
+          return null;
+        }
+        if (!hasNext) {
+          stopped = stopCompleter.isCompleted;
+          break;
         }
 
+        final chunk = iterator.current;
         buffer.write(chunk);
+        final index = indexOfAssistant();
+        if (index < 0) {
+          return null;
+        }
         setState(() {
-          _messages[assistantIndex] = _messages[assistantIndex].copyWith(
+          _messages[index] = _messages[index].copyWith(
             content: visibleContent(),
           );
         });
         _scrollToLatest();
       }
 
+      if (stopped) {
+        final index = indexOfAssistant();
+        if (index >= 0 && _messages[index].content.trim().isEmpty) {
+          setState(() => _messages.removeAt(index));
+        }
+        return null;
+      }
+
       if (!mounted) {
-        return false;
+        return null;
       }
       final finalContent = visibleContent();
       if (finalContent.trim().isEmpty) {
-        setState(() => _messages.removeAt(assistantIndex));
+        final index = indexOfAssistant();
+        if (index >= 0) {
+          setState(() => _messages.removeAt(index));
+        }
         _showSnackBar('$prefix没有返回内容，请再试一次。');
-        return false;
+        return null;
+      }
+      final index = indexOfAssistant();
+      if (index < 0) {
+        return null;
       }
       setState(() {
-        _messages[assistantIndex] = _messages[assistantIndex].copyWith(
-          content: finalContent,
-        );
+        _messages[index] = _messages[index].copyWith(content: finalContent);
       });
-      return true;
+      unawaited(
+        ProactiveMessageService.instance.noteAssistantMessage(
+          conversationId,
+          messageId: _messages[index].id,
+          text: finalContent,
+        ),
+      );
+      return _messages[index];
     } on ChatServiceException catch (error) {
       if (!mounted) {
-        return false;
+        return null;
       }
       setState(() {
         if (visibleContent().trim().isEmpty) {
-          _messages.removeAt(assistantIndex);
+          final index = indexOfAssistant();
+          if (index >= 0) {
+            _messages.removeAt(index);
+          }
         }
       });
       _showSnackBar('$prefix${error.message}');
-      return false;
+      return null;
     } catch (_) {
       if (!mounted) {
-        return false;
+        return null;
       }
       setState(() {
         if (visibleContent().trim().isEmpty) {
-          _messages.removeAt(assistantIndex);
+          final index = indexOfAssistant();
+          if (index >= 0) {
+            _messages.removeAt(index);
+          }
         }
       });
       _showSnackBar('$prefix发送失败，请稍后重试。');
-      return false;
+      return null;
     } finally {
+      try {
+        await iterator.cancel();
+      } catch (_) {
+        // 停止流时忽略取消异常。
+      }
+      _activeStopCompleter = null;
       await _saveHistory(conversationId);
     }
   }
 
   Future<void> _sendMessage() async {
-    if (_isSending) {
-      return;
-    }
-
     final text = _inputController.text.trim();
     final attachedImage = _pendingImage;
     if (text.isEmpty && attachedImage == null) {
@@ -478,9 +700,12 @@ AI 群成员有：$memberNames。
       _showSnackBar('群聊中没有可用角色');
       return;
     }
+    if (!_isGroup &&
+        CharacterStore.instance.cardById(_conversationId) == null) {
+      _showSnackBar('角色卡不存在或已被删除');
+      return;
+    }
 
-    final model = selection.modelId;
-    final responder = _isGroup ? null : CharacterStore.instance.profile.value;
     final userMessage = ChatMessage(
       id: _newMessageId(),
       role: ChatRole.user,
@@ -492,60 +717,171 @@ AI 群成员有：$memberNames。
     );
 
     _inputController.clear();
+    final shouldStartDrain = !_isSending;
 
     setState(() {
       _messages.add(userMessage);
       _pendingImage = null;
-      _isSending = true;
     });
     _scrollToLatest(animate: true);
 
+    _queuedUserMessages.add(userMessage);
     await _saveHistory(conversationId);
+    await _persistQueue(conversationId);
+    unawaited(ProactiveMessageService.instance.noteUserMessage(conversationId));
 
+    if (shouldStartDrain) {
+      await _startDrain(conversationId);
+    }
+  }
+
+  Future<void> _startDrain(String conversationId) async {
+    if (!mounted || _isSending) {
+      return;
+    }
+    _stopRequested = false;
+    setState(() => _isSending = true);
+    ProactiveMessageService.instance.setConversationBusy(conversationId, true);
     try {
-      if (_isGroup) {
-        for (final member in members) {
-          if (!mounted) {
-            break;
-          }
-          final success = await _streamReply(
-            responder: member,
-            conversationId: conversationId,
-            provider: provider,
-            apiKey: apiKey,
-            model: model,
-            systemPrompt: _buildGroupSystemPrompt(member, members),
-            showSender: true,
-          );
-          if (!success) {
-            break;
-          }
+      await _drainQueue(conversationId);
+    } finally {
+      await _finishDrain(conversationId);
+    }
+  }
+
+  Future<void> _drainQueue(String conversationId) async {
+    while (mounted && !_stopRequested && _queuedUserMessages.isNotEmpty) {
+      final message = _queuedUserMessages.first;
+      setState(() => _activeTurnMessageId = message.id);
+      await _runReplyRound(conversationId, message);
+      if (!mounted) {
+        return;
+      }
+      if (_stopRequested) {
+        break;
+      }
+      _queuedUserMessages.removeAt(0);
+      setState(() => _activeTurnMessageId = null);
+      await _persistQueue(conversationId);
+    }
+  }
+
+  Future<void> _finishDrain(String conversationId) async {
+    await _saveHistory(conversationId);
+    await _persistQueue(conversationId);
+    ProactiveMessageService.instance.setConversationBusy(conversationId, false);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isSending = false;
+      _activeTurnMessageId = null;
+      _stopRequested = false;
+    });
+    if (_queuedUserMessages.isNotEmpty) {
+      await _startDrain(conversationId);
+      return;
+    }
+  }
+
+  Future<void> _stopReply() async {
+    if (!_isSending) {
+      return;
+    }
+    _stopRequested = true;
+    final stopCompleter = _activeStopCompleter;
+    if (stopCompleter != null && !stopCompleter.isCompleted) {
+      stopCompleter.complete();
+    }
+    _queuedUserMessages.clear();
+    if (mounted) {
+      setState(() => _activeTurnMessageId = null);
+    }
+    await _persistQueue(_conversationId);
+    if (mounted) {
+      _showSnackBar('已停止回复');
+    }
+  }
+
+  List<ChatMessage> _roundHistory(ChatMessage activeMessage) {
+    return roundHistoryFor(_messages, _queuedUserMessages, activeMessage);
+  }
+
+  Future<void> _runReplyRound(
+    String conversationId,
+    ChatMessage userMessage,
+  ) async {
+    if (!mounted || _stopRequested) {
+      return;
+    }
+
+    final selection = ModelStore.instance.selection.value;
+    final provider =
+        ModelProviderCatalog.byId(selection.providerId) ??
+        ModelProviderCatalog.defaultProvider;
+    final apiKey = ApiKeyStore.instance.keyFor(provider.id).value?.trim() ?? '';
+    if (apiKey.isEmpty) {
+      _showSnackBar('请先在「设置 > 模型」中填写 ${provider.name} API Key。');
+      return;
+    }
+    if (!selection.hasModel) {
+      _showSnackBar('请先在「设置 > 模型」中选择一个模型。');
+      return;
+    }
+
+    final members = _isGroup ? _groupMembers : const <CharacterProfile>[];
+    if (_isGroup && members.isEmpty) {
+      _showSnackBar('群聊中没有可用角色');
+      return;
+    }
+
+    final roundHistory = _roundHistory(userMessage);
+    final model = selection.modelId;
+
+    if (_isGroup) {
+      final speakers = selectGroupSpeakers(
+        members: members,
+        mode: widget.group!.replyMode,
+        userMessage: userMessage.content,
+      );
+      for (final member in speakers) {
+        if (!mounted || _stopRequested) {
+          break;
         }
-      } else {
-        final character = responder!;
-        await _streamReply(
-          responder: character,
+        final reply = await _streamReply(
+          responder: member,
           conversationId: conversationId,
           provider: provider,
           apiKey: apiKey,
           model: model,
-          systemPrompt: MoriConfig.buildSystemPrompt(character),
-          showSender: false,
+          systemPrompt: _buildGroupSystemPrompt(member, members),
+          showSender: true,
+          roundHistory: roundHistory,
         );
-      }
-    } finally {
-      await _saveHistory(conversationId);
-      if (mounted) {
-        setState(() => _isSending = false);
-        if (!_isGroup) {
-          final pendingConversationId = _pendingHistoryConversationId;
-          _pendingHistoryConversationId = null;
-          if (pendingConversationId != null) {
-            await _loadHistory(pendingConversationId);
-          }
+        if (reply == null) {
+          break;
         }
+        roundHistory.add(reply);
       }
+    } else {
+      final character = CharacterStore.instance.cardById(_conversationId);
+      if (character == null) {
+        _showSnackBar('角色卡不存在或已被删除');
+        return;
+      }
+      await _streamReply(
+        responder: character,
+        conversationId: conversationId,
+        provider: provider,
+        apiKey: apiKey,
+        model: model,
+        systemPrompt: MoriConfig.buildSystemPrompt(character),
+        showSender: false,
+        roundHistory: roundHistory,
+      );
     }
+
+    await _saveHistory(conversationId);
   }
 
   void _scrollToLatest({bool animate = false}) {
@@ -621,7 +957,9 @@ AI 群成员有：$memberNames。
     final canAttachImage = ModelStore.instance.supportsVision(
       ModelStore.instance.selection.value,
     );
-    final character = CharacterStore.instance.profile.value;
+    final character = _isGroup
+        ? null
+        : CharacterStore.instance.cardById(_conversationId);
     final userProfile = UserProfileStore.instance.profile.value;
 
     return Column(
@@ -657,8 +995,23 @@ AI 群成员有：$memberNames。
                           : sender.displayName;
                       showSenderName = true;
                     } else {
-                      avatar = CharacterAvatar(character: character, size: 34);
+                      avatar = CharacterAvatar(
+                        character:
+                            character ??
+                            CharacterProfile(id: _conversationId, name: '角色'),
+                        size: 34,
+                      );
                     }
+
+                    final queueStatus = !message.isUser
+                        ? null
+                        : message.id == _activeTurnMessageId
+                        ? '回复中'
+                        : _queuedUserMessages.any(
+                            (queued) => queued.id == message.id,
+                          )
+                        ? '排队中'
+                        : null;
 
                     return Column(
                       children: [
@@ -667,10 +1020,13 @@ AI 群成员有：$memberNames。
                             text: _formatTimestamp(message.createdAt!),
                           ),
                         _ChatBubble(
+                          key: ValueKey('chat-message-${message.id}'),
                           message: message,
                           avatar: avatar,
                           showSenderName: showSenderName,
                           senderName: senderName,
+                          queueStatus: queueStatus,
+                          onLongPress: () => _showMessageActions(message),
                         ),
                       ],
                     );
@@ -684,11 +1040,12 @@ AI 群成员有：$memberNames。
           ),
         _Composer(
           controller: _inputController,
-          canSend: (_hasText || _pendingImage != null) && !_isSending,
+          canSend: _hasText || _pendingImage != null,
           canAttachImage: canAttachImage,
           isSending: _isSending,
           onAttachImage: _pickImage,
           onSend: _sendMessage,
+          onStop: _stopReply,
         ),
       ],
     );
@@ -723,6 +1080,7 @@ class _Composer extends StatelessWidget {
     required this.isSending,
     required this.onAttachImage,
     required this.onSend,
+    required this.onStop,
   });
 
   final TextEditingController controller;
@@ -731,6 +1089,7 @@ class _Composer extends StatelessWidget {
   final bool isSending;
   final VoidCallback onAttachImage;
   final VoidCallback onSend;
+  final VoidCallback onStop;
 
   @override
   Widget build(BuildContext context) {
@@ -765,22 +1124,24 @@ class _Composer extends StatelessWidget {
           const SizedBox(width: 8),
           if (canAttachImage) ...[
             IconButton.filledTonal(
-              onPressed: isSending ? null : onAttachImage,
+              onPressed: onAttachImage,
               tooltip: '发送图片',
               icon: const Icon(Icons.add_rounded),
+            ),
+            const SizedBox(width: 4),
+          ],
+          if (isSending) ...[
+            IconButton.filledTonal(
+              onPressed: onStop,
+              tooltip: '停止回复',
+              icon: const Icon(Icons.stop_rounded),
             ),
             const SizedBox(width: 4),
           ],
           IconButton.filled(
             onPressed: canSend ? onSend : null,
             tooltip: '发送',
-            icon: isSending
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.arrow_upward_rounded),
+            icon: const Icon(Icons.arrow_upward_rounded),
           ),
         ],
       ),
@@ -889,16 +1250,21 @@ class _AttachmentOption extends StatelessWidget {
 
 class _ChatBubble extends StatelessWidget {
   const _ChatBubble({
+    super.key,
     required this.message,
     required this.avatar,
     this.showSenderName = false,
     this.senderName = '',
+    this.queueStatus,
+    this.onLongPress,
   });
 
   final ChatMessage message;
   final Widget avatar;
   final bool showSenderName;
   final String senderName;
+  final String? queueStatus;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -908,120 +1274,149 @@ class _ChatBubble extends StatelessWidget {
     final hasImage = message.image != null;
     final waiting = !isUser && message.content.isEmpty && !hasImage;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment: isUser
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (!isUser) ...[avatar, const SizedBox(width: 8)],
-          Flexible(
-            child: Column(
-              crossAxisAlignment: isUser
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (showSenderName && !isUser)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 2, bottom: 4),
-                    child: Text(
-                      senderName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: colors.onSurfaceVariant,
+    return GestureDetector(
+      onLongPress: onLongPress,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Row(
+          mainAxisAlignment: isUser
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!isUser) ...[avatar, const SizedBox(width: 8)],
+            Flexible(
+              child: Column(
+                crossAxisAlignment: isUser
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (showSenderName && !isUser)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 2, bottom: 4),
+                      child: Text(
+                        senderName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
                       ),
                     ),
-                  ),
-                Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-                  ),
-                  padding: hasImage
-                      ? const EdgeInsets.all(6)
-                      : const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 11,
-                        ),
-                  decoration: BoxDecoration(
-                    color: isUser
-                        ? colors.primary
-                        : colors.surfaceContainerHighest,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(18),
-                      topRight: const Radius.circular(18),
-                      bottomLeft: Radius.circular(isUser ? 18 : 4),
-                      bottomRight: Radius.circular(isUser ? 4 : 18),
+                  Container(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.sizeOf(context).width * 0.78,
                     ),
+                    padding: hasImage
+                        ? const EdgeInsets.all(6)
+                        : const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 11,
+                          ),
+                    decoration: BoxDecoration(
+                      color: isUser
+                          ? colors.primary
+                          : colors.surfaceContainerHighest,
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(18),
+                        topRight: const Radius.circular(18),
+                        bottomLeft: Radius.circular(isUser ? 18 : 4),
+                        bottomRight: Radius.circular(isUser ? 4 : 18),
+                      ),
+                    ),
+                    child: waiting
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: isUser
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (hasImage)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 220,
+                                      maxHeight: 280,
+                                    ),
+                                    child: Image.memory(
+                                      message.image!.bytes,
+                                      fit: BoxFit.cover,
+                                      semanticLabel: '图片',
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                            return Container(
+                                              width: 180,
+                                              height: 120,
+                                              color: colors
+                                                  .surfaceContainerHighest,
+                                              alignment: Alignment.center,
+                                              child: Icon(
+                                                Icons.broken_image_outlined,
+                                                color: colors.onSurfaceVariant,
+                                              ),
+                                            );
+                                          },
+                                    ),
+                                  ),
+                                ),
+                              if (message.content.isNotEmpty)
+                                Padding(
+                                  padding: hasImage
+                                      ? const EdgeInsets.fromLTRB(6, 8, 6, 2)
+                                      : EdgeInsets.zero,
+                                  child: Text(
+                                    message.content,
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      color: isUser
+                                          ? colors.onPrimary
+                                          : colors.onSurface,
+                                      height: 1.45,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                   ),
-                  child: waiting
-                      ? SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
+                  if (isUser && queueStatus != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, right: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            queueStatus == '回复中'
+                                ? Icons.autorenew_rounded
+                                : Icons.schedule_rounded,
+                            size: 12,
                             color: colors.onSurfaceVariant,
                           ),
-                        )
-                      : Column(
-                          crossAxisAlignment: isUser
-                              ? CrossAxisAlignment.end
-                              : CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (hasImage)
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 220,
-                                    maxHeight: 280,
-                                  ),
-                                  child: Image.memory(
-                                    message.image!.bytes,
-                                    fit: BoxFit.cover,
-                                    semanticLabel: '图片',
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        width: 180,
-                                        height: 120,
-                                        color: colors.surfaceContainerHighest,
-                                        alignment: Alignment.center,
-                                        child: Icon(
-                                          Icons.broken_image_outlined,
-                                          color: colors.onSurfaceVariant,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            if (message.content.isNotEmpty)
-                              Padding(
-                                padding: hasImage
-                                    ? const EdgeInsets.fromLTRB(6, 8, 6, 2)
-                                    : EdgeInsets.zero,
-                                child: Text(
-                                  message.content,
-                                  style: theme.textTheme.bodyLarge?.copyWith(
-                                    color: isUser
-                                        ? colors.onPrimary
-                                        : colors.onSurface,
-                                    height: 1.45,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                ),
-              ],
+                          const SizedBox(width: 4),
+                          Text(
+                            queueStatus!,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          if (isUser) ...[const SizedBox(width: 8), avatar],
-        ],
+            if (isUser) ...[const SizedBox(width: 8), avatar],
+          ],
+        ),
       ),
     );
   }

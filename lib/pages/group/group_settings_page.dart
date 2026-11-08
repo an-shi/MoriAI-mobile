@@ -3,8 +3,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mori_ai/models/group_profile.dart';
+import 'package:mori_ai/models/group_reply_mode.dart';
 import 'package:mori_ai/services/avatar_store.dart';
 import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/services/chat_history_store.dart';
+import 'package:mori_ai/services/chat_queue_store.dart';
 import 'package:mori_ai/services/group_store.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/group_avatar.dart';
@@ -22,6 +25,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
   final ImagePicker _imagePicker = ImagePicker();
   late final TextEditingController _nameController;
   late final Set<String> _selectedIds;
+  late GroupReplyMode _replyMode;
   Uint8List? _pendingAvatarBytes;
   bool _removeAvatar = false;
   bool _saving = false;
@@ -35,6 +39,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
       for (final id in group?.memberIds ?? const <String>[])
         if (CharacterStore.instance.cardById(id) != null) id,
     };
+    _replyMode = group?.replyMode ?? GroupReplyMode.sequential;
   }
 
   @override
@@ -148,6 +153,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
           avatar: avatar,
           memberIds: _selectedIds.toList(growable: false),
           createdAt: group.createdAt,
+          replyMode: _replyMode,
         ),
       );
 
@@ -178,6 +184,61 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _deleteHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('删除聊天记录'),
+          content: const Text('确定删除该群聊的全部聊天记录吗？删除后无法恢复。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('删除'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    try {
+      await ChatHistoryStore.instance.deleteConversation(widget.groupId);
+      await ChatQueueStore.instance.saveFor(widget.groupId, const []);
+      if (mounted) {
+        _showSnackBar('聊天记录已删除');
+      }
+    } catch (_) {
+      if (mounted) {
+        _showSnackBar('删除聊天记录失败，请重试');
+      }
+    }
+  }
+
+  String _replyModeLabel(GroupReplyMode mode) {
+    return switch (mode) {
+      GroupReplyMode.sequential => '固定顺序，全部回复',
+      GroupReplyMode.randomOrder => '随机顺序，全部回复',
+      GroupReplyMode.singleRandom => '随机选择一名角色回复',
+      GroupReplyMode.mentioned => '优先回复被点名的角色',
+    };
+  }
+
+  String _replyModeDescription(GroupReplyMode mode) {
+    return switch (mode) {
+      GroupReplyMode.sequential => '群成员按列表顺序依次回复。',
+      GroupReplyMode.randomOrder => '每轮打乱成员顺序，但所有成员都会回复。',
+      GroupReplyMode.singleRandom => '每轮随机选择一名角色回复，更接近群聊。',
+      GroupReplyMode.mentioned => '消息中提到角色名时由该角色回复，否则随机一名。',
+    };
   }
 
   @override
@@ -263,6 +324,37 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
             ),
           ),
           const SizedBox(height: 20),
+          DropdownButtonFormField<GroupReplyMode>(
+            initialValue: _replyMode,
+            decoration: InputDecoration(
+              labelText: '发言顺序',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            items: [
+              for (final mode in GroupReplyMode.values)
+                DropdownMenuItem<GroupReplyMode>(
+                  value: mode,
+                  child: Text(_replyModeLabel(mode)),
+                ),
+            ],
+            onChanged: _saving
+                ? null
+                : (mode) {
+                    if (mode != null) {
+                      setState(() => _replyMode = mode);
+                    }
+                  },
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _replyModeDescription(_replyMode),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -336,6 +428,25 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                   )
                 : const Icon(Icons.save_outlined),
             label: Text(_selectedIds.length < 2 ? '至少选择两个成员' : '保存群聊设置'),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            elevation: 0,
+            color: colors.surfaceContainerLow,
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 6,
+              ),
+              leading: Icon(Icons.delete_sweep_outlined, color: colors.error),
+              title: Text('删除聊天记录', style: TextStyle(color: colors.error)),
+              subtitle: const Text('清空该群聊的全部本地聊天记录'),
+              onTap: _saving ? null : _deleteHistory,
+            ),
           ),
         ],
       ),

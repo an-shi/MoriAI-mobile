@@ -38,7 +38,11 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: ChatPage())),
+      const MaterialApp(
+        home: Scaffold(
+          body: ChatPage(characterId: CharacterProfile.presetMoriId),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -73,11 +77,92 @@ void main() {
     ]);
 
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: ChatPage())),
+      const MaterialApp(
+        home: Scaffold(
+          body: ChatPage(characterId: CharacterProfile.presetMoriId),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('这是上次的聊天记录'), findsOneWidget);
     expect(find.text('发消息…'), findsOneWidget);
+  });
+
+  testWidgets('appends externally generated messages', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ChatPage(characterId: CharacterProfile.presetMoriId),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final message = ChatMessage(
+      id: 'external_1',
+      role: ChatRole.assistant,
+      content: '主动发来的消息',
+      createdAt: DateTime(2026, 11, 8, 22),
+    );
+    ChatHistoryStore.instance.notifyExternalMessages(
+      CharacterProfile.presetMoriId,
+      [message],
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('主动发来的消息'), findsOneWidget);
+
+    ChatHistoryStore.instance.notifyExternalMessages(
+      CharacterProfile.presetMoriId,
+      [message],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('主动发来的消息'), findsOneWidget);
+  });
+
+  testWidgets('deletes a single message from the long-press menu', (
+    tester,
+  ) async {
+    await ChatHistoryStore.instance.saveFor(CharacterProfile.presetMoriId, [
+      ChatMessage(
+        id: 'message_delete',
+        role: ChatRole.user,
+        content: '准备删除的消息',
+        createdAt: DateTime(2026, 11, 8, 10, 30),
+      ),
+      ChatMessage(
+        id: 'message_keep',
+        role: ChatRole.assistant,
+        content: '保留的消息',
+        createdAt: DateTime(2026, 11, 8, 10, 31),
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ChatPage(characterId: CharacterProfile.presetMoriId),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(
+      find.byKey(const ValueKey('chat-message-message_delete')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('删除消息'), findsOneWidget);
+
+    await tester.tap(find.text('删除消息'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('准备删除的消息'), findsNothing);
+    expect(find.text('保留的消息'), findsOneWidget);
+
+    final stored = await ChatHistoryStore.instance.loadFor(
+      CharacterProfile.presetMoriId,
+    );
+    expect(stored.map((message) => message.id), ['message_keep']);
   });
 }

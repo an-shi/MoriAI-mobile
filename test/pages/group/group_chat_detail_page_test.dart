@@ -68,4 +68,51 @@ void main() {
     expect(find.text('新的群聊名称'), findsOneWidget);
     expect(GroupStore.instance.groupById(group.id)?.name, '新的群聊名称');
   });
+
+  testWidgets('deletes the group chat history from the settings page', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final second = await CharacterStore.instance.addCard(
+      name: '小森',
+      persona: '安静、耐心。',
+    );
+    final group = await GroupStore.instance.createGroup(
+      name: '测试群聊',
+      memberIds: ['mori', second.id],
+    );
+    await ChatHistoryStore.instance.saveFor(group.id, [
+      ChatMessage(
+        id: 'group_delete',
+        role: ChatRole.user,
+        content: '准备删除的群聊记录',
+        senderId: 'user',
+        createdAt: DateTime(2026, 11, 8, 10),
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(home: GroupChatDetailPage(group: group)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('准备删除的群聊记录'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('群聊设置'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('删除聊天记录'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除聊天记录'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('确定删除该群聊的全部聊天记录吗？删除后无法恢复。'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(await ChatHistoryStore.instance.loadFor(group.id), isEmpty);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('准备删除的群聊记录'), findsNothing);
+  });
 }

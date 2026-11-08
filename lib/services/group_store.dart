@@ -123,6 +123,7 @@ class GroupStore {
       avatar: next.avatar.trim(),
       memberIds: List<String>.unmodifiable(uniqueMembers),
       createdAt: next.createdAt,
+      replyMode: next.replyMode,
     );
     final previous = groups.value;
     final nextGroups = [...previous]..[index] = updated;
