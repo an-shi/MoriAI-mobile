@@ -61,30 +61,6 @@ class _CharacterCardSettingsPageState extends State<CharacterCardSettingsPage> {
     }
   }
 
-  Future<void> _selectCard(CharacterProfile card) async {
-    if (_busy || card.id == CharacterStore.instance.activeCard.id) {
-      return;
-    }
-
-    setState(() => _busy = true);
-    try {
-      await CharacterStore.instance.selectCard(card.id);
-      if (!mounted) {
-        return;
-      }
-      _showSnackBar('已切换到「${card.displayName}」');
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      _showSnackBar('切换角色卡失败，请重试');
-    } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-      }
-    }
-  }
-
   Future<void> _deleteCard(CharacterProfile card) async {
     if (_busy) {
       return;
@@ -99,7 +75,7 @@ class _CharacterCardSettingsPageState extends State<CharacterCardSettingsPage> {
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('删除角色卡'),
-          content: Text('确定删除「${card.displayName}」吗？'),
+          content: Text('确定删除「${card.displayName}」吗？该角色的聊天记录、动态和相关评论也会一起删除。'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -150,20 +126,16 @@ class _CharacterCardSettingsPageState extends State<CharacterCardSettingsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('角色卡')),
       body: AnimatedBuilder(
-        animation: Listenable.merge([
-          CharacterStore.instance.cards,
-          CharacterStore.instance.activeCardId,
-        ]),
+        animation: CharacterStore.instance.cards,
         builder: (context, _) {
           final cards = CharacterStore.instance.cards.value;
-          final activeId = CharacterStore.instance.activeCard.id;
           final canDelete = CharacterStore.instance.canDeleteCards;
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             children: [
               Text(
-                '点击角色卡进入编辑；点击右侧圆圈切换当前对话使用的角色。',
+                '点击角色卡进入编辑。',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: colors.onSurfaceVariant,
                 ),
@@ -188,10 +160,8 @@ class _CharacterCardSettingsPageState extends State<CharacterCardSettingsPage> {
                         ),
                       _CharacterCardTile(
                         card: cards[index],
-                        selected: cards[index].id == activeId,
                         canDelete: canDelete && !_busy,
                         onEdit: () => _openEditor(cards[index]),
-                        onSelect: () => _selectCard(cards[index]),
                         onDelete: () => _deleteCard(cards[index]),
                       ),
                     ],
@@ -233,18 +203,14 @@ class _CharacterCardSettingsPageState extends State<CharacterCardSettingsPage> {
 class _CharacterCardTile extends StatelessWidget {
   const _CharacterCardTile({
     required this.card,
-    required this.selected,
     required this.canDelete,
     required this.onEdit,
-    required this.onSelect,
     required this.onDelete,
   });
 
   final CharacterProfile card;
-  final bool selected;
   final bool canDelete;
   final VoidCallback onEdit;
-  final VoidCallback onSelect;
   final VoidCallback onDelete;
 
   @override
@@ -283,30 +249,11 @@ class _CharacterCardTile extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            onPressed: selected ? null : onSelect,
-            tooltip: selected ? '当前使用中' : '使用这张角色卡',
-            style: IconButton.styleFrom(
-              disabledForegroundColor: colors.primary,
-            ),
-            icon: Icon(
-              selected
-                  ? Icons.check_circle_rounded
-                  : Icons.radio_button_unchecked_rounded,
-              color: selected ? colors.primary : colors.onSurfaceVariant,
-            ),
-          ),
-          IconButton(
-            onPressed: canDelete ? onDelete : null,
-            tooltip: canDelete ? '删除角色卡' : '至少保留一张角色卡',
-            icon: const Icon(Icons.delete_outline_rounded),
-          ),
-        ],
+      trailing: IconButton(
+        onPressed: canDelete ? onDelete : null,
+        tooltip: canDelete ? '删除角色卡' : '至少保留一张角色卡',
+        icon: const Icon(Icons.delete_outline_rounded),
       ),
-      selected: selected,
       onTap: onEdit,
     );
   }

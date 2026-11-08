@@ -2,7 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mori_ai/models/character_profile.dart';
+import 'package:mori_ai/models/chat_message.dart';
 import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/services/chat_history_store.dart';
+import 'package:mori_ai/services/group_store.dart';
+import 'package:mori_ai/services/moment_store.dart';
+import 'package:mori_ai/services/pinned_conversation_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -15,25 +20,20 @@ void main() {
   tearDown(() async {
     SharedPreferences.setMockInitialValues({});
     await CharacterStore.instance.load();
+    await GroupStore.instance.load();
+    await MomentStore.instance.load();
+    await PinnedConversationStore.instance.load();
   });
 
   test('seeds the preset Mori card by default', () async {
     await CharacterStore.instance.load();
 
     expect(CharacterStore.instance.cards.value, hasLength(1));
-    expect(
-      CharacterStore.instance.activeCard.id,
-      CharacterProfile.presetMoriId,
-    );
-    expect(CharacterStore.instance.activeCard.displayName, 'Mori');
-    expect(
-      CharacterStore.instance.activeCard.avatar,
-      CharacterProfile.presetMoriAvatar,
-    );
-    expect(
-      CharacterStore.instance.activeCard.persona,
-      CharacterProfile.defaultPersona,
-    );
+    final card = CharacterStore.instance.cards.value.single;
+    expect(card.id, CharacterProfile.presetMoriId);
+    expect(card.displayName, 'Mori');
+    expect(card.avatar, CharacterProfile.presetMoriAvatar);
+    expect(card.persona, CharacterProfile.defaultPersona);
   });
 
   test('adds the preset avatar once and respects later removal', () async {
@@ -41,20 +41,24 @@ void main() {
       'character_cards': jsonEncode([
         CharacterProfile.presetMori.withAvatar('').toJson(),
       ]),
-      'character_active_card_id': CharacterProfile.presetMoriId,
     });
 
     await CharacterStore.instance.load();
     expect(
-      CharacterStore.instance.activeCard.avatar,
+      CharacterStore.instance.cardById(CharacterProfile.presetMoriId)?.avatar,
       CharacterProfile.presetMoriAvatar,
     );
 
     await CharacterStore.instance.save(
-      CharacterStore.instance.activeCard.withAvatar(''),
+      CharacterStore.instance
+          .cardById(CharacterProfile.presetMoriId)!
+          .withAvatar(''),
     );
     await CharacterStore.instance.load();
-    expect(CharacterStore.instance.activeCard.avatar, isEmpty);
+    expect(
+      CharacterStore.instance.cardById(CharacterProfile.presetMoriId)?.avatar,
+      isEmpty,
+    );
   });
 
   test('creates a card only when requested', () async {
@@ -68,8 +72,7 @@ void main() {
     );
 
     expect(CharacterStore.instance.cards.value, hasLength(2));
-    expect(CharacterStore.instance.activeCard.id, id);
-    expect(CharacterStore.instance.activeCard.name, '第二个角色');
+    expect(CharacterStore.instance.cardById(id)?.name, '第二个角色');
   });
 
   test('cannot delete the only remaining character card', () async {
@@ -82,7 +85,7 @@ void main() {
     expect(CharacterStore.instance.cards.value, hasLength(1));
   });
 
-  test('adds, selects, and deletes character cards', () async {
+  test('adds and deletes character cards', () async {
     await CharacterStore.instance.load();
     final added = await CharacterStore.instance.addCard(
       name: '小森',
@@ -90,60 +93,29 @@ void main() {
     );
 
     expect(CharacterStore.instance.cards.value, hasLength(2));
-    expect(CharacterStore.instance.activeCard.id, added.id);
-    expect(CharacterStore.instance.activeCard.name, '小森');
-
-    await CharacterStore.instance.selectCard(CharacterProfile.presetMoriId);
-    expect(
-      CharacterStore.instance.activeCard.id,
-      CharacterProfile.presetMoriId,
-    );
-    expect(CharacterStore.instance.activeCard.displayName, 'Mori');
+    expect(CharacterStore.instance.cardById(added.id)?.displayName, '小森');
 
     await CharacterStore.instance.deleteCard(added.id);
     expect(CharacterStore.instance.cards.value, hasLength(1));
-    expect(
-      CharacterStore.instance.activeCard.id,
-      CharacterProfile.presetMoriId,
-    );
+    expect(CharacterStore.instance.cards.value.single.id, 'mori');
   });
 
-  test('deleting the active card selects another card', () async {
+  test('editing a card only changes that card', () async {
     await CharacterStore.instance.load();
     final added = await CharacterStore.instance.addCard(
       name: '小森',
       persona: '冷静、简洁，喜欢倾听。',
     );
-
-    await CharacterStore.instance.deleteCard(added.id);
-
-    expect(CharacterStore.instance.cards.value, hasLength(1));
-    expect(
-      CharacterStore.instance.activeCard.id,
-      CharacterProfile.presetMoriId,
-    );
-  });
-
-  test('editing an inactive card does not change the active card', () async {
-    await CharacterStore.instance.load();
-    final added = await CharacterStore.instance.addCard(
-      name: '小森',
-      persona: '冷静、简洁，喜欢倾听。',
-    );
-    await CharacterStore.instance.selectCard(CharacterProfile.presetMoriId);
 
     await CharacterStore.instance.save(
       CharacterProfile(id: added.id, name: '小森', persona: '修改后的人格设定。'),
     );
 
-    expect(
-      CharacterStore.instance.activeCard.id,
-      CharacterProfile.presetMoriId,
-    );
     expect(CharacterStore.instance.cardById(added.id)?.persona, '修改后的人格设定。');
+    expect(CharacterStore.instance.cardById('mori')?.displayName, 'Mori');
   });
 
-  test('persists cards, active selection, and edits', () async {
+  test('persists cards and edits', () async {
     await CharacterStore.instance.load();
     final added = await CharacterStore.instance.addCard(
       name: '小森',
@@ -156,9 +128,9 @@ void main() {
     await CharacterStore.instance.load();
 
     expect(CharacterStore.instance.cards.value, hasLength(2));
-    expect(CharacterStore.instance.activeCard.id, added.id);
-    expect(CharacterStore.instance.activeCard.name, '小森');
-    expect(CharacterStore.instance.activeCard.persona, '温柔、耐心，说话简洁自然。');
+    final loaded = CharacterStore.instance.cardById(added.id);
+    expect(loaded?.displayName, '小森');
+    expect(loaded?.persona, '温柔、耐心，说话简洁自然。');
   });
 
   test('migrates the old single profile and keeps the Mori preset', () async {
@@ -170,7 +142,12 @@ void main() {
     await CharacterStore.instance.load();
 
     expect(CharacterStore.instance.cards.value, hasLength(2));
-    expect(CharacterStore.instance.activeCard.name, '小森');
+    expect(
+      CharacterStore.instance.cards.value.any(
+        (card) => card.displayName == '小森',
+      ),
+      isTrue,
+    );
     expect(
       CharacterStore.instance.cards.value.any(
         (card) => card.id == CharacterProfile.presetMoriId,
@@ -178,4 +155,96 @@ void main() {
       isTrue,
     );
   });
+
+  test(
+    'deleting a card cleans its chats, group messages, and moments',
+    () async {
+      await CharacterStore.instance.load();
+      await GroupStore.instance.load();
+      await MomentStore.instance.load();
+      await PinnedConversationStore.instance.load();
+
+      final card = await CharacterStore.instance.addCard(
+        name: '小森',
+        persona: '冷静、简洁，喜欢倾听。',
+      );
+
+      await ChatHistoryStore.instance.saveFor(card.id, [
+        ChatMessage(
+          id: 'card_message',
+          role: ChatRole.assistant,
+          content: '这条记录应该被删除。',
+        ),
+      ]);
+
+      final group = await GroupStore.instance.createGroup(
+        name: '测试群聊',
+        memberIds: [CharacterProfile.presetMoriId, card.id],
+      );
+      await ChatHistoryStore.instance.saveFor(group.id, [
+        const ChatMessage(
+          id: 'group_user',
+          role: ChatRole.user,
+          content: '大家好。',
+          senderId: 'user',
+        ),
+        const ChatMessage(
+          id: 'group_mori',
+          role: ChatRole.assistant,
+          content: '你好。',
+          senderId: 'mori',
+        ),
+        ChatMessage(
+          id: 'group_card',
+          role: ChatRole.assistant,
+          content: '你们好。',
+          senderId: card.id,
+          senderName: card.displayName,
+        ),
+      ]);
+
+      final ownMoment = await MomentStore.instance.add(
+        authorId: card.id,
+        authorName: card.displayName,
+        isUser: false,
+        content: '准备删除的动态。',
+      );
+      final otherMoment = await MomentStore.instance.add(
+        authorId: CharacterProfile.presetMoriId,
+        authorName: 'Mori',
+        isUser: false,
+        content: '保留的动态。',
+      );
+      await MomentStore.instance.addComment(
+        otherMoment.id,
+        authorId: card.id,
+        authorName: card.displayName,
+        isUser: false,
+        content: '准备删除的评论。',
+      );
+      await MomentStore.instance.addComment(
+        otherMoment.id,
+        authorId: 'user',
+        authorName: '我',
+        isUser: true,
+        content: '保留的评论。',
+      );
+      await PinnedConversationStore.instance.setPinned(card.id, true);
+
+      await CharacterStore.instance.deleteCard(card.id);
+
+      expect(await ChatHistoryStore.instance.loadFor(card.id), isEmpty);
+      final groupHistory = await ChatHistoryStore.instance.loadFor(group.id);
+      expect(groupHistory.map((message) => message.id), [
+        'group_user',
+        'group_mori',
+      ]);
+
+      expect(MomentStore.instance.momentById(ownMoment.id), isNull);
+      final remaining = MomentStore.instance.momentById(otherMoment.id);
+      expect(remaining, isNotNull);
+      expect(remaining!.comments.map((comment) => comment.authorId), ['user']);
+      expect(PinnedConversationStore.instance.isPinned(card.id), isFalse);
+    },
+  );
 }

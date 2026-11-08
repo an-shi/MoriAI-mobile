@@ -48,9 +48,12 @@ void main() {
     await tester.tap(find.text('保存角色卡'));
     await tester.pumpAndSettle();
 
-    expect(CharacterStore.instance.activeCard.name, '小森');
-    expect(CharacterStore.instance.activeCard.persona, '温柔、耐心，喜欢倾听。');
-    expect(CharacterStore.instance.activeCard.personality, '安静、细心、有一点幽默感。');
+    final saved = CharacterStore.instance.cardById(
+      CharacterProfile.presetMoriId,
+    );
+    expect(saved?.name, '小森');
+    expect(saved?.persona, '温柔、耐心，喜欢倾听。');
+    expect(saved?.personality, '安静、细心、有一点幽默感。');
     expect(find.text('小森'), findsOneWidget);
     expect(find.text('角色卡已保存'), findsOneWidget);
   });
@@ -78,8 +81,11 @@ void main() {
     await tester.tap(find.text('保存角色卡'));
     await tester.pumpAndSettle();
 
-    expect(CharacterStore.instance.activeCard.type, CharacterCardType.roleplay);
-    expect(CharacterStore.instance.activeCard.scenario, '一个安静的夜晚。');
+    final saved = CharacterStore.instance.cardById(
+      CharacterProfile.presetMoriId,
+    );
+    expect(saved?.type, CharacterCardType.roleplay);
+    expect(saved?.scenario, '一个安静的夜晚。');
   });
 
   testWidgets('pasted card type uses a single raw definition field', (
@@ -105,9 +111,12 @@ void main() {
     await tester.tap(find.text('保存角色卡'));
     await tester.pumpAndSettle();
 
-    expect(CharacterStore.instance.activeCard.type, CharacterCardType.paste);
-    expect(CharacterStore.instance.activeCard.name, '小森');
-    expect(CharacterStore.instance.activeCard.rawDefinition, raw);
+    final saved = CharacterStore.instance.cardById(
+      CharacterProfile.presetMoriId,
+    );
+    expect(saved?.type, CharacterCardType.paste);
+    expect(saved?.name, '小森');
+    expect(saved?.rawDefinition, raw);
   });
 
   testWidgets('cannot delete the only card, but can delete after adding one', (
@@ -146,16 +155,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(CharacterStore.instance.cards.value, hasLength(2));
-    expect(CharacterStore.instance.activeCard.name, '第二个角色');
     expect(find.text('角色卡已创建'), findsOneWidget);
     expect(find.byIcon(Icons.delete_outline_rounded), findsNWidgets(2));
-
-    await tester.tap(find.byTooltip('使用这张角色卡'));
-    await tester.pumpAndSettle();
-    expect(
-      CharacterStore.instance.activeCard.id,
-      CharacterProfile.presetMoriId,
-    );
 
     await tester.tap(find.byIcon(Icons.delete_outline_rounded).last);
     await tester.pumpAndSettle();
@@ -166,7 +167,7 @@ void main() {
 
     expect(CharacterStore.instance.cards.value, hasLength(1));
     expect(
-      CharacterStore.instance.activeCard.id,
+      CharacterStore.instance.cards.value.single.id,
       CharacterProfile.presetMoriId,
     );
     expect(find.byTooltip('至少保留一张角色卡'), findsOneWidget);
