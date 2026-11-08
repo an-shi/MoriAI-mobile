@@ -37,7 +37,7 @@ void main() {
   testWidgets('opens the edit page from a card and saves changes', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(800, 1800));
+    await tester.binding.setSurfaceSize(const Size(800, 2400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await openMoriEditor(tester);
@@ -56,6 +56,22 @@ void main() {
     expect(saved?.personality, '安静、细心、有一点幽默感。');
     expect(find.text('小森'), findsOneWidget);
     expect(find.text('角色卡已保存'), findsOneWidget);
+  });
+
+  testWidgets('fills the burst style template', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await openMoriEditor(tester);
+
+    final button = find.text('填入连发模板').last;
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(fieldWithLabel('说话方式'));
+    expect(field.controller?.text, contains('用 ||| 分隔'));
   });
 
   testWidgets('switches card type and exposes the matching fields', (

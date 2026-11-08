@@ -23,6 +23,13 @@ class CharacterCardEditPage extends StatefulWidget {
 }
 
 class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
+  static const _burstStyleTemplate = '''
+你是在用手机打字聊天，不是在写文章。
+一次只说一两句话，最多两三句。
+想说的多就拆成几条短消息发，用 ||| 分隔。
+每条尽量短，一条控制在 15-25 个字左右。
+禁止一次输出一大段，超过三行就是错的。''';
+
   late final TextEditingController _nameController;
   late final TextEditingController _taglineController;
   late final TextEditingController _personaController;
@@ -455,6 +462,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
                     maxLines: 30,
                     textCapitalization: TextCapitalization.sentences,
                   ),
+                  _burstTemplateButton(_rawDefinitionController),
                 ],
               ),
             ),
@@ -465,14 +473,20 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
               icon: Icons.psychology_outlined,
               title: '人格描述',
               description: '一段自由填写的人格说明，适合简单陪伴类型。',
-              child: _buildField(
-                controller: _personaController,
-                label: '人格描述',
-                hint: '例如：温柔、真诚，带一点幽默感，善于倾听。',
-                maxLength: 1200,
-                minLines: 4,
-                maxLines: 8,
-                textCapitalization: TextCapitalization.sentences,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildField(
+                    controller: _personaController,
+                    label: '人格描述',
+                    hint: '例如：温柔、真诚，带一点幽默感，善于倾听。',
+                    maxLength: 1200,
+                    minLines: 4,
+                    maxLines: 8,
+                    textCapitalization: TextCapitalization.sentences,
+                  ),
+                  _burstTemplateButton(_personaController),
+                ],
               ),
             ),
           ],
@@ -496,11 +510,12 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
                   _buildField(
                     controller: _speakingStyleController,
                     label: '说话方式',
-                    hint: '例如：先回应情绪，再给建议；回复 2-5 句，语气自然。',
+                    hint: '例如：短句口语；一次一两句，想说的多就拆成几条发，用 ||| 分隔。',
                     maxLength: 800,
                     minLines: 2,
                     maxLines: 4,
                   ),
+                  _burstTemplateButton(_speakingStyleController),
                   const SizedBox(height: 12),
                   _buildField(
                     controller: _backgroundController,
@@ -654,6 +669,30 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
         alignLabelWithHint: maxLines > 1,
         counterText: '',
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  void _appendBurstTemplate(TextEditingController controller) {
+    final existing = controller.text.trimRight();
+    if (existing.contains('用 ||| 分隔')) {
+      return;
+    }
+    final next = existing.isEmpty
+        ? _burstStyleTemplate
+        : '$existing\n\n$_burstStyleTemplate';
+    controller.text = next;
+    controller.selection = TextSelection.collapsed(offset: next.length);
+    setState(() {});
+  }
+
+  Widget _burstTemplateButton(TextEditingController controller) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: _saving ? null : () => _appendBurstTemplate(controller),
+        icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+        label: const Text('填入连发模板'),
       ),
     );
   }
