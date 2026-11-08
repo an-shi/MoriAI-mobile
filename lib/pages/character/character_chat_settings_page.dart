@@ -1,16 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mori_ai/models/character_profile.dart';
-import 'package:mori_ai/models/proactive_message_settings.dart';
+import 'package:mori_ai/models/chat_burst_settings.dart';
 import 'package:mori_ai/models/proactive_message_state.dart';
 import 'package:mori_ai/pages/character/character_moments_page.dart';
 import 'package:mori_ai/pages/memory/character_card_edit_page.dart';
 import 'package:mori_ai/pages/settings/proactive_message_settings_page.dart';
 import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/services/chat_burst_settings_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_queue_store.dart';
+import 'package:mori_ai/services/diary_store.dart';
+import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
+import 'package:mori_ai/widgets/diary_character_settings_sheet.dart';
+import 'package:mori_ai/widgets/number_setting_field.dart';
 
 class CharacterChatSettingsPage extends StatelessWidget {
   const CharacterChatSettingsPage({super.key, required this.characterId});
@@ -123,6 +130,10 @@ class CharacterChatSettingsPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
+              _MoodStatusCard(characterId: character.id),
+              const SizedBox(height: 16),
+              _DiaryCharacterCard(character: character),
+              const SizedBox(height: 16),
               Card(
                 elevation: 0,
                 color: colors.surfaceContainerLow,
@@ -173,6 +184,11 @@ class CharacterChatSettingsPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
+              _BurstTendencyCard(
+                characterId: character.id,
+                characterName: character.displayName,
+              ),
+              const SizedBox(height: 16),
               _ProactiveConversationCard(
                 characterId: character.id,
                 characterName: character.displayName,
@@ -200,6 +216,288 @@ class CharacterChatSettingsPage extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DiaryCharacterCard extends StatelessWidget {
+  const _DiaryCharacterCard({required this.character});
+
+  final CharacterProfile character;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return AnimatedBuilder(
+      animation: DiaryStore.instance.settings,
+      builder: (context, _) {
+        final settings = DiaryStore.instance.settings.value;
+        final custom = settings.hasOverride(character.id);
+        final enabled = settings.isEnabledFor(character.id);
+        final timeLabel = settings.timeLabelFor(character.id);
+        final mode = custom ? '单独设置' : '跟随全局';
+        final status = enabled ? '每天 $timeLabel 写' : '不自动写';
+
+        return Card(
+          elevation: 0,
+          color: colors.surfaceContainerLow,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 6,
+            ),
+            leading: Icon(Icons.menu_book_outlined, color: colors.primary),
+            title: Text(
+              '日记',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text('$mode · $status'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () =>
+                showDiaryCharacterSettingsSheet(context, character: character),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MoodStatusCard extends StatelessWidget {
+  const _MoodStatusCard({required this.characterId});
+
+  final String characterId;
+
+  Future<void> _resetMood(BuildContext context) async {
+    await MoodStore.instance.reset(characterId);
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('心情已重置')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        MoodStore.instance.settings,
+        MoodStore.instance.revision,
+      ]),
+      builder: (context, _) {
+        final enabled = MoodStore.instance.settings.value.enabled;
+        final snapshot = MoodStore.instance.snapshotFor(characterId);
+        final hasRecord = snapshot.updatedAtMs > 0;
+        final updatedAt = hasRecord ? _formatTime(snapshot.updatedAt) : '';
+        final detail = snapshot.reason.isEmpty
+            ? (hasRecord ? updatedAt : '还没有心情记录')
+            : (hasRecord ? '${snapshot.reason} · $updatedAt' : snapshot.reason);
+
+        return Card(
+          elevation: 0,
+          color: colors.surfaceContainerLow,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.mood_outlined, color: colors.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '心情',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (enabled)
+                      IconButton(
+                        tooltip: '重置心情',
+                        onPressed: () => unawaited(_resetMood(context)),
+                        icon: const Icon(Icons.restart_alt_rounded),
+                      ),
+                  ],
+                ),
+                if (!enabled)
+                  Text(
+                    '心情已关闭，可在「设置 > 心情」中开启。',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  )
+                else ...[
+                  Row(
+                    children: [
+                      Text(
+                        snapshot.label,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: colors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${snapshot.value}/100',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: snapshot.value / 100,
+                      minHeight: 6,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    detail,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _formatTime(DateTime time) {
+    final now = DateTime.now();
+    final hh = time.hour.toString().padLeft(2, '0');
+    final mm = time.minute.toString().padLeft(2, '0');
+    if (time.year == now.year &&
+        time.month == now.month &&
+        time.day == now.day) {
+      return '今天 $hh:$mm';
+    }
+    final month = time.month.toString().padLeft(2, '0');
+    final day = time.day.toString().padLeft(2, '0');
+    return '${time.year}-$month-$day $hh:$mm';
+  }
+}
+
+class _BurstTendencyCard extends StatelessWidget {
+  const _BurstTendencyCard({
+    required this.characterId,
+    required this.characterName,
+  });
+
+  final String characterId;
+  final String characterName;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return ValueListenableBuilder<ChatBurstSettings>(
+      valueListenable: ChatBurstSettingsStore.instance.settings,
+      builder: (context, settings, _) {
+        final override =
+            settings.characterTendencies[characterId] ??
+            ChatBurstTendency.followGlobal;
+        final effective = settings.tendencyFor(characterId);
+        final range = settings.rangeFor(effective);
+        return Card(
+          elevation: 0,
+          color: colors.surfaceContainerLow,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.forum_outlined, color: colors.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '聊天连发倾向',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '只影响「$characterName」的回复。选择“跟随全局”时使用聊天设置里的全局倾向。',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final tendency in ChatBurstTendency.values)
+                      ChoiceChip(
+                        label: Text(tendency.label),
+                        selected: override == tendency,
+                        onSelected: (_) {
+                          unawaited(
+                            ChatBurstSettingsStore.instance
+                                .setCharacterTendency(characterId, tendency),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '当前生效：${effective.label}（全局：${settings.globalTendency.label}）',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  effective == ChatBurstTendency.off
+                      ? '当前范围：不启用自动拆条'
+                      : '当前范围：${range.minMessages}-${range.maxMessages} 条，'
+                            '每条约 ${range.minChars}-${range.maxChars} 字（在全局聊天设置中调整）',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -266,6 +564,9 @@ class _ProactiveConversationCardState
   }
 
   Future<void> _setDailyLimit(int dailyLimit) async {
+    if (_loading || _saving) {
+      return;
+    }
     setState(() {
       _state = (_state ?? const ProactiveMessageState()).copyWith(
         dailyLimit: dailyLimit,
@@ -296,7 +597,14 @@ class _ProactiveConversationCardState
         final global = ProactiveMessageStore.instance.settings.value;
         final enabled = _state?.enabled ?? true;
         final dailyLimit = _state?.dailyLimit ?? 0;
-        final effectiveLimit = dailyLimit > 0 ? dailyLimit : global.dailyLimit;
+        final effectiveLimit = dailyLimit > 0
+            ? dailyLimit
+            : dailyLimit < 0
+            ? -1
+            : global.dailyLimit;
+        final effectiveLimitLabel = effectiveLimit < 0
+            ? '无上限'
+            : '$effectiveLimit 条';
         final subtitle = !global.enabled
             ? '全局自动消息未开启，开启后该设置才会生效'
             : enabled
@@ -333,54 +641,16 @@ class _ProactiveConversationCardState
                 color: colors.outlineVariant,
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '该角色每日上限',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          dailyLimit > 0
-                              ? '$dailyLimit 条'
-                              : '跟随全局（$effectiveLimit 条）',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Slider(
-                      value: dailyLimit.toDouble(),
-                      min: 0,
-                      max: ProactiveMessageSettings.maxDailyLimit.toDouble(),
-                      divisions: ProactiveMessageSettings.maxDailyLimit,
-                      label: dailyLimit > 0 ? '$dailyLimit 条' : '跟随全局',
-                      onChanged: _loading || _saving
-                          ? null
-                          : (value) {
-                              setState(() {
-                                _state =
-                                    (_state ?? const ProactiveMessageState())
-                                        .copyWith(dailyLimit: value.round());
-                              });
-                            },
-                      onChangeEnd: (value) => _setDailyLimit(value.round()),
-                    ),
-                    Text(
-                      '0 表示跟随全局每日总上限；全局总上限仍会生效。',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: NumberSettingField(
+                  label: '该角色每日上限',
+                  value: dailyLimit,
+                  min: 0,
+                  allowUnlimited: true,
+                  helperText: dailyLimit < 0
+                      ? '当前该角色无上限；0 表示跟随全局（$effectiveLimitLabel）。'
+                      : '0 表示跟随全局（$effectiveLimitLabel）；负数表示该角色无上限。',
+                  onChanged: _setDailyLimit,
                 ),
               ),
               ListTile(

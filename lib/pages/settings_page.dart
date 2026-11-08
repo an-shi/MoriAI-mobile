@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:mori_ai/config/model_providers.dart';
+import 'package:mori_ai/models/chat_burst_settings.dart';
 import 'package:mori_ai/models/model_settings.dart';
 import 'package:mori_ai/pages/settings/about_settings_page.dart';
 import 'package:mori_ai/pages/settings/appearance_settings_page.dart';
+import 'package:mori_ai/pages/settings/chat_settings_page.dart';
+import 'package:mori_ai/pages/settings/diary_settings_page.dart';
 import 'package:mori_ai/pages/settings/model_settings_page.dart';
 import 'package:mori_ai/pages/settings/moment_interaction_settings_page.dart';
+import 'package:mori_ai/pages/settings/mood_settings_page.dart';
 import 'package:mori_ai/pages/settings/proactive_message_settings_page.dart';
+import 'package:mori_ai/services/chat_burst_settings_store.dart';
+import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/moment_interaction_settings_store.dart';
+import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
 import 'package:mori_ai/services/theme_store.dart';
 
@@ -26,6 +33,9 @@ class SettingsPage extends StatelessWidget {
           ThemeStore.instance.themeMode,
           MomentInteractionSettingsStore.instance.settings,
           ProactiveMessageStore.instance.settings,
+          ChatBurstSettingsStore.instance.settings,
+          MoodStore.instance.settings,
+          DiaryStore.instance.settings,
         ]),
         builder: (context, _) {
           final theme = Theme.of(context);
@@ -66,6 +76,45 @@ class SettingsPage extends StatelessWidget {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const AppearanceSettingsPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  const _SettingsMenuDivider(),
+                  _SettingsMenuTile(
+                    icon: Icons.forum_outlined,
+                    title: '聊天',
+                    subtitle: _chatBurstSummary(),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const ChatSettingsPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  const _SettingsMenuDivider(),
+                  _SettingsMenuTile(
+                    icon: Icons.mood_outlined,
+                    title: '心情',
+                    subtitle: _moodSummary(),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const MoodSettingsPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  const _SettingsMenuDivider(),
+                  _SettingsMenuTile(
+                    icon: Icons.menu_book_outlined,
+                    title: '日记',
+                    subtitle: _diarySummary(),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const DiarySettingsPage(),
                         ),
                       );
                     },
@@ -162,12 +211,42 @@ class SettingsPage extends StatelessWidget {
     };
   }
 
+  String _chatBurstSummary() {
+    return '连发倾向：${ChatBurstSettingsStore.instance.settings.value.globalTendency.label}';
+  }
+
+  String _moodSummary() {
+    final settings = MoodStore.instance.settings.value;
+    return settings.enabled ? '已开启 · 基线 ${settings.base}' : '已关闭';
+  }
+
+  String _diarySummary() {
+    final settings = DiaryStore.instance.settings.value;
+    final enabledOverrides = settings.characterSettings.values
+        .where((value) => value.enabled)
+        .length;
+    if (!settings.enabled && enabledOverrides == 0) {
+      return '已关闭';
+    }
+    if (!settings.enabled) {
+      return '全局关闭 · $enabledOverrides 个角色单独开启';
+    }
+    final overrides = settings.characterSettings.isEmpty
+        ? ''
+        : ' · ${settings.characterSettings.length} 个单独设置';
+    return '已开启 · 每天 ${settings.timeLabel}$overrides';
+  }
+
   String _momentInteractionSummary() {
     final settings = MomentInteractionSettingsStore.instance.settings.value;
-    final comments = settings.autoCommentCount <= 0
+    final comments = settings.autoCommentCount < 0
+        ? '评论无上限'
+        : settings.autoCommentCount == 0
         ? '评论关闭'
         : '评论 ${settings.autoCommentCount} 人';
-    final replies = settings.autoReplyDepth <= 0
+    final replies = settings.autoReplyDepth < 0
+        ? '回复无上限'
+        : settings.autoReplyDepth == 0
         ? '回复关闭'
         : '回复 ${settings.autoReplyDepth} 层';
     return '$comments · $replies';
@@ -184,7 +263,10 @@ class SettingsPage extends StatelessWidget {
     final scheduled = settings.scheduledEnabled
         ? '定时 ${settings.scheduledTimes.length} 个'
         : '定时关闭';
-    return '$silence · $scheduled · 每日 ${settings.dailyLimit} 条';
+    final daily = settings.dailyLimit < 0
+        ? '每日无上限'
+        : '每日 ${settings.dailyLimit} 条';
+    return '$silence · $scheduled · $daily';
   }
 }
 

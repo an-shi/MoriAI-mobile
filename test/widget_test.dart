@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mori_ai/main.dart';
 import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/group_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +13,7 @@ void main() {
     await CharacterStore.instance.load();
     await GroupStore.instance.load();
     await MomentStore.instance.load();
+    await DiaryStore.instance.load();
   });
 
   tearDown(() async {
@@ -19,6 +21,7 @@ void main() {
     await CharacterStore.instance.load();
     await GroupStore.instance.load();
     await MomentStore.instance.load();
+    await DiaryStore.instance.load();
   });
 
   testWidgets('bottom navigation switches between pages', (tester) async {
@@ -31,6 +34,7 @@ void main() {
     await tester.tap(find.text('记忆与角色卡'));
     await tester.pumpAndSettle();
     expect(find.text('记忆'), findsOneWidget);
+    expect(find.text('日记'), findsOneWidget);
     expect(find.text('角色卡'), findsOneWidget);
 
     await tester.tap(find.text('动态'));
@@ -108,6 +112,14 @@ void main() {
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('日记'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, '日记'), findsOneWidget);
+    expect(find.text('还没有日记'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('角色卡'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, '角色卡'), findsOneWidget);
@@ -156,5 +168,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, '自动消息'), findsOneWidget);
     expect(find.text('启用自动消息'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('日记'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('日记'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, '日记'), findsOneWidget);
+    expect(find.text('启用每日日记'), findsOneWidget);
   });
 }

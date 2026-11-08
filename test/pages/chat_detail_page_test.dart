@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mori_ai/models/character_profile.dart';
+import 'package:mori_ai/models/chat_burst_settings.dart';
 import 'package:mori_ai/models/chat_message.dart';
 import 'package:mori_ai/models/moment.dart';
 import 'package:mori_ai/pages/character/character_chat_settings_page.dart';
 import 'package:mori_ai/pages/character/character_moments_page.dart';
 import 'package:mori_ai/pages/chat_detail_page.dart';
 import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/services/chat_burst_settings_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
+import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
+import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,6 +26,9 @@ void main() {
     await ModelStore.instance.load();
     await MomentStore.instance.load();
     await ProactiveMessageStore.instance.load();
+    await ChatBurstSettingsStore.instance.load();
+    await MoodStore.instance.load();
+    await DiaryStore.instance.load();
   });
 
   tearDown(() async {
@@ -30,6 +37,9 @@ void main() {
     await ModelStore.instance.load();
     await MomentStore.instance.load();
     await ProactiveMessageStore.instance.load();
+    await ChatBurstSettingsStore.instance.load();
+    await MoodStore.instance.load();
+    await DiaryStore.instance.load();
   });
 
   testWidgets('opens the character card editor from the character page', (
@@ -190,5 +200,126 @@ void main() {
       CharacterProfile.presetMoriId,
     );
     expect(state?.enabled, isFalse);
+  });
+
+  testWidgets('sets the per-character burst tendency', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 2200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: CharacterChatSettingsPage(
+          characterId: CharacterProfile.presetMoriId,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('聊天连发倾向'), findsOneWidget);
+    await tester.ensureVisible(find.text('积极'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('积极'));
+    await tester.pumpAndSettle();
+
+    expect(
+      ChatBurstSettingsStore.instance.settings.value.tendencyFor(
+        CharacterProfile.presetMoriId,
+      ),
+      ChatBurstTendency.active,
+    );
+
+    await tester.tap(find.text('跟随全局'));
+    await tester.pumpAndSettle();
+    expect(
+      ChatBurstSettingsStore.instance.settings.value.characterTendencies,
+      isEmpty,
+    );
+  });
+
+  testWidgets('shows and resets the character mood', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await MoodStore.instance.nudge(CharacterProfile.presetMoriId, 30, '被夸了');
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: CharacterChatSettingsPage(
+          characterId: CharacterProfile.presetMoriId,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('心情'), findsOneWidget);
+    expect(find.text('超开心'), findsOneWidget);
+    expect(find.text('90/100'), findsOneWidget);
+    expect(find.textContaining('被夸了'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('重置心情'));
+    await tester.pumpAndSettle();
+
+    expect(
+      MoodStore.instance.snapshotFor(CharacterProfile.presetMoriId).value,
+      60,
+    );
+    expect(find.text('平平常常'), findsOneWidget);
+    expect(find.text('60/100'), findsOneWidget);
+  });
+
+  testWidgets('sets per-character diary settings', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 2000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: CharacterChatSettingsPage(
+          characterId: CharacterProfile.presetMoriId,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('日记'), findsOneWidget);
+    await tester.ensureVisible(find.text('日记'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('日记'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mori的日记'), findsOneWidget);
+    final followGlobal = find.descendant(
+      of: find.byType(BottomSheet),
+      matching: find.text('跟随全局'),
+    );
+    expect(followGlobal, findsOneWidget);
+    expect(find.text('单独设置'), findsOneWidget);
+
+    await tester.tap(find.text('单独设置'));
+    await tester.pumpAndSettle();
+    expect(
+      DiaryStore.instance.settings.value.hasOverride(
+        CharacterProfile.presetMoriId,
+      ),
+      isTrue,
+    );
+    expect(find.text('每天写日记'), findsOneWidget);
+
+    await tester.tap(find.text('每天写日记'));
+    await tester.pumpAndSettle();
+    expect(
+      DiaryStore.instance.settings.value
+          .settingsFor(CharacterProfile.presetMoriId)
+          ?.enabled,
+      isTrue,
+    );
+
+    await tester.tap(followGlobal);
+    await tester.pumpAndSettle();
+    expect(
+      DiaryStore.instance.settings.value.hasOverride(
+        CharacterProfile.presetMoriId,
+      ),
+      isFalse,
+    );
   });
 }

@@ -3,11 +3,17 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:mori_ai/pages/home_page.dart';
 import 'package:mori_ai/services/api_key_store.dart';
 import 'package:mori_ai/services/avatar_store.dart';
+import 'package:mori_ai/services/character_activity_backfill.dart';
+import 'package:mori_ai/services/character_activity_store.dart';
 import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/services/chat_burst_settings_store.dart';
+import 'package:mori_ai/services/diary_service.dart';
+import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/group_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/moment_interaction_settings_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
+import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/pinned_conversation_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
@@ -26,11 +32,17 @@ Future<void> main() async {
     MomentStore.instance.load(),
     MomentInteractionSettingsStore.instance.load(),
     ProactiveMessageStore.instance.load(),
+    ChatBurstSettingsStore.instance.load(),
+    CharacterActivityStore.instance.load(),
+    MoodStore.instance.load(),
+    DiaryStore.instance.load(),
     AvatarStore.instance.load(),
     ThemeStore.instance.load(),
   ]);
+  await CharacterActivityBackfill.instance.ensureBackfilled();
   runApp(const MoriApp());
   ProactiveMessageService.instance.start();
+  DiaryService.instance.start();
 }
 
 class MoriApp extends StatelessWidget {
