@@ -5,6 +5,7 @@ import 'package:mori_ai/pages/chat_list_page.dart';
 import 'package:mori_ai/pages/group/group_chat_detail_page.dart';
 import 'package:mori_ai/pages/group/new_group_chat_page.dart';
 import 'package:mori_ai/pages/memory_page.dart';
+import 'package:mori_ai/pages/moments_page.dart';
 import 'package:mori_ai/pages/profile/personal_settings_page.dart';
 import 'package:mori_ai/pages/settings_page.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
@@ -19,25 +20,31 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  static const _titles = ['对话', '记忆与角色卡', '设置'];
+  static const _titles = ['对话', '记忆与角色卡', '动态'];
 
-  static const _pages = [ChatListPage(), MemoryPage(), SettingsPage()];
+  static const _pages = [ChatListPage(), MemoryPage(), MomentsPage()];
 
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _currentIndex = 0;
 
   bool get _isChatTab => _currentIndex == 0;
 
-  Future<void> _openPersonalSettings() async {
+  Future<void> _openDrawerPage(Widget page) async {
     Navigator.of(context).pop();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
       }
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const PersonalSettingsPage()),
-      );
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
     });
+  }
+
+  Future<void> _openPersonalSettings() {
+    return _openDrawerPage(const PersonalSettingsPage());
+  }
+
+  Future<void> _openSettings() {
+    return _openDrawerPage(const SettingsPage());
   }
 
   Future<void> _openCreateGroup() async {
@@ -126,7 +133,10 @@ class _HomePageState extends State<HomePage> {
         actions: _isChatTab ? [_buildAddAction()] : null,
       ),
       drawer: _isChatTab
-          ? UserProfileDrawer(onOpenProfile: _openPersonalSettings)
+          ? UserProfileDrawer(
+              onOpenProfile: _openPersonalSettings,
+              onOpenSettings: _openSettings,
+            )
           : null,
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: keyboardVisible
@@ -151,9 +161,9 @@ class _HomePageState extends State<HomePage> {
                   label: '记忆与角色卡',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.settings_outlined),
-                  selectedIcon: Icon(Icons.settings_rounded),
-                  label: '设置',
+                  icon: Icon(Icons.dynamic_feed_outlined),
+                  selectedIcon: Icon(Icons.dynamic_feed_rounded),
+                  label: '动态',
                 ),
               ],
             ),

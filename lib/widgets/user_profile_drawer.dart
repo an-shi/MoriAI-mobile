@@ -4,9 +4,14 @@ import 'package:mori_ai/services/user_profile_store.dart';
 import 'package:mori_ai/widgets/user_avatar.dart';
 
 class UserProfileDrawer extends StatelessWidget {
-  const UserProfileDrawer({super.key, required this.onOpenProfile});
+  const UserProfileDrawer({
+    super.key,
+    required this.onOpenProfile,
+    required this.onOpenSettings,
+  });
 
   final VoidCallback onOpenProfile;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -69,8 +74,16 @@ class UserProfileDrawer extends StatelessWidget {
                 ),
                 Divider(height: 1, color: colors.outlineVariant),
                 const Spacer(),
+                Divider(height: 1, color: colors.outlineVariant),
+                ListTile(
+                  leading: const Icon(Icons.settings_outlined),
+                  title: const Text('设置'),
+                  subtitle: const Text('模型、外观与关于'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: onOpenSettings,
+                ),
                 Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                   child: Text(
                     'Mori',
                     style: theme.textTheme.labelMedium?.copyWith(
