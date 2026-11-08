@@ -4,6 +4,7 @@ import 'package:mori_ai/main.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/group_store.dart';
+import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,6 +15,7 @@ void main() {
     await GroupStore.instance.load();
     await MomentStore.instance.load();
     await DiaryStore.instance.load();
+    await MemoryStore.instance.load();
   });
 
   tearDown(() async {
@@ -22,6 +24,7 @@ void main() {
     await GroupStore.instance.load();
     await MomentStore.instance.load();
     await DiaryStore.instance.load();
+    await MemoryStore.instance.load();
   });
 
   testWidgets('bottom navigation switches between pages', (tester) async {
@@ -108,6 +111,7 @@ void main() {
     await tester.tap(find.text('记忆'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, '记忆'), findsOneWidget);
+    expect(find.text('添加记忆'), findsWidgets);
 
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
@@ -154,6 +158,8 @@ void main() {
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('动态互动'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('动态互动'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, '动态互动'), findsOneWidget);
@@ -177,5 +183,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, '日记'), findsOneWidget);
     expect(find.text('启用每日日记'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('记忆'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('记忆'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, '记忆设置'), findsOneWidget);
+    expect(find.text('启用长期记忆'), findsOneWidget);
   });
 }

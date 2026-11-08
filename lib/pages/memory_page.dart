@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mori_ai/pages/memory/character_card_settings_page.dart';
 import 'package:mori_ai/pages/memory/diary_page.dart';
-import 'package:mori_ai/pages/memory/memory_settings_page.dart';
+import 'package:mori_ai/pages/memory/memory_library_page.dart';
 
 class MemoryPage extends StatelessWidget {
   const MemoryPage({super.key});
@@ -33,11 +33,11 @@ class MemoryPage extends StatelessWidget {
               _MemoryMenuTile(
                 icon: Icons.auto_stories_outlined,
                 title: '记忆',
-                subtitle: '管理对话中记住的内容',
+                subtitle: '查看和管理角色记住的事',
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => const MemorySettingsPage(),
+                      builder: (_) => const MemoryLibraryPage(),
                     ),
                   );
                 },

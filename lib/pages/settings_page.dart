@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mori_ai/config/model_providers.dart';
 import 'package:mori_ai/models/chat_burst_settings.dart';
 import 'package:mori_ai/models/model_settings.dart';
+import 'package:mori_ai/pages/memory/memory_settings_page.dart';
 import 'package:mori_ai/pages/settings/about_settings_page.dart';
 import 'package:mori_ai/pages/settings/appearance_settings_page.dart';
 import 'package:mori_ai/pages/settings/chat_settings_page.dart';
@@ -12,6 +13,7 @@ import 'package:mori_ai/pages/settings/mood_settings_page.dart';
 import 'package:mori_ai/pages/settings/proactive_message_settings_page.dart';
 import 'package:mori_ai/services/chat_burst_settings_store.dart';
 import 'package:mori_ai/services/diary_store.dart';
+import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/moment_interaction_settings_store.dart';
 import 'package:mori_ai/services/mood_store.dart';
@@ -36,6 +38,7 @@ class SettingsPage extends StatelessWidget {
           ChatBurstSettingsStore.instance.settings,
           MoodStore.instance.settings,
           DiaryStore.instance.settings,
+          MemoryStore.instance.settings,
         ]),
         builder: (context, _) {
           final theme = Theme.of(context);
@@ -115,6 +118,19 @@ class SettingsPage extends StatelessWidget {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const DiarySettingsPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  const _SettingsMenuDivider(),
+                  _SettingsMenuTile(
+                    icon: Icons.psychology_outlined,
+                    title: '记忆',
+                    subtitle: _memorySummary(),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const MemorySettingsPage(),
                         ),
                       );
                     },
@@ -235,6 +251,15 @@ class SettingsPage extends StatelessWidget {
         ? ''
         : ' · ${settings.characterSettings.length} 个单独设置';
     return '已开启 · 每天 ${settings.timeLabel}$overrides';
+  }
+
+  String _memorySummary() {
+    final settings = MemoryStore.instance.settings.value;
+    if (!settings.enabled) {
+      return '已关闭';
+    }
+    return '已开启 · 召回 ${settings.recallCount} 条'
+        '${settings.autoExtract ? ' · 自动整理' : ''}';
   }
 
   String _momentInteractionSummary() {

@@ -9,6 +9,7 @@ import 'package:mori_ai/models/character_activity.dart';
 import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/chat_burst_settings.dart';
 import 'package:mori_ai/models/chat_message.dart';
+import 'package:mori_ai/models/memory.dart';
 import 'package:mori_ai/models/model_option.dart';
 import 'package:mori_ai/models/model_settings.dart';
 import 'package:mori_ai/pages/chat_page.dart';
@@ -17,6 +18,7 @@ import 'package:mori_ai/services/character_activity_store.dart';
 import 'package:mori_ai/services/chat_burst_settings_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
+import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/mood_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,6 +32,7 @@ void main() {
     await ChatBurstSettingsStore.instance.load();
     await CharacterActivityStore.instance.load();
     await MoodStore.instance.load();
+    await MemoryStore.instance.load();
     ApiKeyStore.instance.keyFor(ModelProviderCatalog.defaultProviderId).value =
         'test-key';
   });
@@ -42,6 +45,7 @@ void main() {
     await ChatBurstSettingsStore.instance.load();
     await CharacterActivityStore.instance.load();
     await MoodStore.instance.load();
+    await MemoryStore.instance.load();
   });
 
   testWidgets('shows the image button only for vision-capable models', (
@@ -377,6 +381,33 @@ void main() {
 
     expect(requestBodies.single, contains('你现在超开心'));
     expect(requestBodies.single, contains('被用户夸了'));
+  });
+
+  testWidgets('injects relevant long-term memories into chat prompt', (
+    tester,
+  ) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await MemoryStore.instance.saveEntry(
+      MemoryEntry(
+        id: 'milk',
+        characterId: CharacterProfile.presetMoriId,
+        text: '用户喜欢在睡前喝热牛奶',
+        category: MemoryCategory.preference,
+        importance: 0.8,
+        createdAtMs: now,
+        updatedAtMs: now,
+      ),
+    );
+    final requestBodies = <String>[];
+    await _prepareBurstTest(
+      tester,
+      '第一句',
+      userText: '我想喝点热牛奶',
+      requestBodies: requestBodies,
+    );
+
+    expect(requestBodies.single, contains('用户喜欢在睡前喝热牛奶'));
+    expect(requestBodies.single, contains('长期记得'));
   });
 
   testWidgets('observes mood changes from the user message', (tester) async {

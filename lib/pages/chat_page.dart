@@ -16,6 +16,7 @@ import 'package:mori_ai/services/chat_burst_settings_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_queue_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
+import 'package:mori_ai/services/memory_context_builder.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
@@ -564,10 +565,24 @@ AI 群成员有：$memberNames。
         : CharacterActivityContextBuilder.instance.buildForPrivateChat(
             responder.id,
           );
+    var memoryQuery = '';
+    for (final message in roundHistory.reversed) {
+      if (message.isUser && message.content.trim().isNotEmpty) {
+        memoryQuery = message.content.trim();
+        break;
+      }
+    }
+    final memoryContext = showSender
+        ? ''
+        : MemoryContextBuilder.instance.buildForPrivateChat(
+            responder.id,
+            query: memoryQuery,
+          );
     final moodContext = MoodStore.instance.contextLine(responder.id);
     final systemPromptWithContext = [
       systemPrompt,
       if (activityContext.isNotEmpty) activityContext,
+      if (memoryContext.isNotEmpty) memoryContext,
       if (moodContext.isNotEmpty) moodContext,
     ].join('\n\n');
     final burstSettings = ChatBurstSettingsStore.instance.settings.value;

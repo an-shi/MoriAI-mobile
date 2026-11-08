@@ -36,7 +36,10 @@ class ChatHistoryStore {
 
   Directory? _imagesRoot;
 
-  Future<List<ChatMessage>> loadFor(String cardId) async {
+  Future<List<ChatMessage>> loadFor(
+    String cardId, {
+    bool includeImages = true,
+  }) async {
     try {
       final preferences = await SharedPreferences.getInstance();
       final raw = preferences.getString(_prefsKey(cardId));
@@ -77,7 +80,7 @@ class ChatHistoryStore {
 
         ChatImage? image;
         final imageValue = item['image'];
-        if (imageValue is Map) {
+        if (includeImages && imageValue is Map) {
           final fileName = imageValue['file'];
           final mimeType = imageValue['mimeType'];
           if (fileName is String && mimeType is String) {

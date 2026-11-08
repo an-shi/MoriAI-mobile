@@ -14,6 +14,7 @@ import 'package:mori_ai/services/character_activity_recorder.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
+import 'package:mori_ai/services/memory_context_builder.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:mori_ai/services/mood_store.dart';
@@ -775,11 +776,23 @@ class ProactiveMessageService with WidgetsBindingObserver {
     final buffer = StringBuffer();
     final activityContext = CharacterActivityContextBuilder.instance
         .buildForProactive(character.id);
+    var memoryQuery = '';
+    for (final message in recent.reversed) {
+      if (message.isUser && message.content.trim().isNotEmpty) {
+        memoryQuery = message.content.trim();
+        break;
+      }
+    }
+    final memoryContext = MemoryContextBuilder.instance.buildForProactive(
+      character.id,
+      query: memoryQuery,
+    );
     final moodContext = MoodStore.instance.contextLine(character.id);
     final systemPrompt =
         '${MoriConfig.buildSystemPrompt(character)}\n\n'
         '$_proactiveSystemInstruction'
         '${activityContext.isEmpty ? '' : '\n\n$activityContext'}'
+        '${memoryContext.isEmpty ? '' : '\n\n$memoryContext'}'
         '${moodContext.isEmpty ? '' : '\n\n$moodContext'}';
     try {
       await for (final chunk in _chatService.streamChat(

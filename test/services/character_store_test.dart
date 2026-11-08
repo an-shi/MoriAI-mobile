@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/chat_message.dart';
+import 'package:mori_ai/models/memory.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/group_store.dart';
+import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:mori_ai/services/pinned_conversation_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,6 +25,7 @@ void main() {
     await GroupStore.instance.load();
     await MomentStore.instance.load();
     await PinnedConversationStore.instance.load();
+    await MemoryStore.instance.load();
   });
 
   test('seeds the preset Mori card by default', () async {
@@ -87,9 +90,19 @@ void main() {
 
   test('adds and deletes character cards', () async {
     await CharacterStore.instance.load();
+    await MemoryStore.instance.load();
     final added = await CharacterStore.instance.addCard(
       name: '小森',
       persona: '冷静、简洁，喜欢倾听。',
+    );
+    await MemoryStore.instance.saveEntry(
+      MemoryEntry(
+        id: 'memory_sen',
+        characterId: added.id,
+        text: '小森记得用户喜欢热牛奶',
+        createdAtMs: DateTime.now().millisecondsSinceEpoch,
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
     );
 
     expect(CharacterStore.instance.cards.value, hasLength(2));
@@ -98,6 +111,7 @@ void main() {
     await CharacterStore.instance.deleteCard(added.id);
     expect(CharacterStore.instance.cards.value, hasLength(1));
     expect(CharacterStore.instance.cards.value.single.id, 'mori');
+    expect(MemoryStore.instance.entriesFor(added.id), isEmpty);
   });
 
   test('editing a card only changes that card', () async {
