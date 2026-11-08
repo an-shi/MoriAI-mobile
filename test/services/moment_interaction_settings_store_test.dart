@@ -31,13 +31,20 @@ void main() {
     expect(loaded.autoReplyDepth, 2);
   });
 
-  test('normalizes values outside the supported range', () async {
+  test('normalizes negative values and keeps large positive values', () async {
     final settings = const MomentInteractionSettings(
-      autoCommentCount: 99,
+      autoCommentCount: -5,
       autoReplyDepth: -1,
     ).normalized();
 
-    expect(settings.autoCommentCount, 5);
-    expect(settings.autoReplyDepth, 0);
+    expect(settings.autoCommentCount, MomentInteractionSettings.unlimited);
+    expect(settings.autoReplyDepth, MomentInteractionSettings.unlimited);
+
+    final large = const MomentInteractionSettings(
+      autoCommentCount: 99,
+      autoReplyDepth: 99,
+    ).normalized();
+    expect(large.autoCommentCount, 99);
+    expect(large.autoReplyDepth, 99);
   });
 }

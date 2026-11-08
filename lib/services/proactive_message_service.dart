@@ -15,6 +15,7 @@ import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
+import 'package:mori_ai/utils/chat_bubble_utils.dart';
 import 'package:mori_ai/utils/chat_text_utils.dart';
 
 class ProactiveMessageException implements Exception {
@@ -45,11 +46,12 @@ class ProactiveMessageService with WidgetsBindingObserver {
   static final ProactiveMessageService instance = ProactiveMessageService._();
 
   static const _checkInterval = Duration(seconds: 30);
-  static const _globalCooldown = Duration(minutes: 5);
+  static const _characterCooldown = Duration(minutes: 5);
   static const _scheduledGrace = Duration(hours: 2);
   static const _retryDelay = Duration(minutes: 60);
+  static const _scheduledRetryDelay = Duration(minutes: 30);
   static const _maxHistoryMessages = 30;
-  static const _maxBubbles = 3;
+  static const _maxBubbles = 5;
   static const _maxBubbleLength = 200;
   static const _nudgeMinDelay = Duration(minutes: 15);
   static const _nudgeMaxDelay = Duration(minutes: 40);
@@ -69,7 +71,7 @@ class ProactiveMessageService with WidgetsBindingObserver {
 【主动消息模式】
 现在你要主动发起聊天，而不是回复用户的最新消息。保持角色设定和说话习惯，像一个真人在手机上随手发消息。
 要求：
-- 输出 1-2 句自然、简短的话；如有必要，可以用换行分成 2-3 条短消息。
+- 输出 1-2 句自然、简短的话；如有必要，可以用 ||| 分隔成 2-3 条短消息，或用换行分成多条。
 - 优先使用真实素材：最近的聊天、你发过的动态、你确实知道的事。没有真实素材就表达一个很小的当下感受或关心，不要编造具体事件、地点、人物。
 - 可以接续最近的话题、分享一个很小的日常念头、关心用户当下的时间或状态，或者轻轻提醒作息。
 - 不要使用“在吗”“有什么可以帮你的”这类客服式开场，不要连续追问，不要重复最近说过的话。
@@ -95,12 +97,23 @@ class ProactiveMessageService with WidgetsBindingObserver {
   final Random _random;
   final Set<String> _busyConversations = {};
   final Set<String> _generating = {};
+  final Map<String, DateTime> _scheduledRetryAfter = {};
 
   Timer? _timer;
   bool _started = false;
   bool _appActive = true;
   bool _checking = false;
-  DateTime? _lastTriggerAt;
+  DateTime? _lastCheckAt;
+  DateTime? _lastErrorAt;
+  String? _lastError;
+
+  bool get isRunning => _started && _appActive;
+
+  DateTime? get lastCheckAt => _lastCheckAt;
+
+  DateTime? get lastErrorAt => _lastErrorAt;
+
+  String? get lastError => _lastError;
 
   void start() {
     if (_started) {
@@ -235,10 +248,11 @@ class ProactiveMessageService with WidgetsBindingObserver {
       conversationId,
       state.copyWith(
         enabled: enabled,
-        dailyLimit: dailyLimit?.clamp(
-          0,
-          ProactiveMessageSettings.maxDailyLimit,
-        ),
+        dailyLimit: dailyLimit == null
+            ? null
+            : dailyLimit < 0
+            ? ProactiveMessageSettings.unlimited
+            : dailyLimit,
       ),
     );
   }
@@ -252,8 +266,8 @@ class ProactiveMessageService with WidgetsBindingObserver {
     return _trigger(conversationId, manual: true);
   }
 
-  @visibleForTesting
-  Future<void> runCheckForTest() async {
+  /// 立即执行一次检查。用于设置页“立即检查一次”。
+  Future<void> checkNow() async {
     final wasStarted = _started;
     _started = true;
     _appActive = true;
@@ -262,6 +276,117 @@ class ProactiveMessageService with WidgetsBindingObserver {
     } finally {
       _started = wasStarted;
     }
+  }
+
+  @visibleForTesting
+  Future<void> runCheckForTest() => checkNow();
+
+  /// 汇总自动消息当前状态，供设置页排查“为什么没有发送”。
+  Future<ProactiveMessageDiagnostics> diagnose() async {
+    final settings = ProactiveMessageStore.instance.settings.value;
+    final now = DateTime.now();
+    final modelConfigured = _hasModelConfig();
+    final quietNow = settings.isQuietTime(now);
+    final cards = CharacterStore.instance.cards.value;
+
+    final states = <String, ProactiveMessageState>{};
+    final histories = <String, bool>{};
+    var totalToday = 0;
+    for (final card in cards) {
+      final state = _rollover(await _stateFor(card.id), now);
+      states[card.id] = state;
+      histories[card.id] =
+          await ChatHistoryStore.instance.summaryFor(card.id) != null;
+      totalToday += state.dailyCount;
+    }
+
+    final rows = <ProactiveMessageDiagnostic>[];
+    for (final card in cards) {
+      final state = states[card.id]!;
+      final hasHistory = histories[card.id] ?? false;
+      final characterLimit = state.dailyLimit < 0
+          ? null
+          : state.dailyLimit > 0
+          ? state.dailyLimit
+          : (settings.dailyLimit < 0 ? null : settings.dailyLimit);
+      final scheduledRetryAt = _scheduledRetryAfter[card.id];
+      final scheduledRetryPending =
+          scheduledRetryAt != null && scheduledRetryAt.isAfter(now);
+      final scheduledDue =
+          settings.scheduledEnabled &&
+          !scheduledRetryPending &&
+          _dueScheduledSlot(settings, state, now) != null;
+      final silenceDue = settings.silenceEnabled && _silenceDue(state, now);
+      final characterCooldown = _characterCooldownRemaining(state, now);
+      final cooldownActive = characterCooldown != null;
+      final unansweredBlocked =
+          settings.maxUnanswered >= 0 &&
+          state.unansweredCount >= settings.maxUnanswered;
+      final characterLimitBlocked =
+          characterLimit != null && state.dailyCount >= characterLimit;
+      final globalLimitBlocked =
+          settings.dailyLimit >= 0 && totalToday >= settings.dailyLimit;
+
+      String reason;
+      if (!settings.enabled) {
+        reason = '全局自动消息已关闭';
+      } else if (!modelConfigured) {
+        reason = '未配置模型或 API Key';
+      } else if (!state.enabled) {
+        reason = '该角色已关闭自动消息';
+      } else if (!hasHistory) {
+        reason = '该角色还没有聊天记录';
+      } else if (unansweredBlocked) {
+        reason = '连续未回复已达上限';
+      } else if (characterLimitBlocked) {
+        reason = '该角色今日已达上限';
+      } else if (globalLimitBlocked) {
+        reason = '所有角色今日总量已达上限';
+      } else if (quietNow) {
+        reason = '当前处于免打扰时段';
+      } else if (_busyConversations.contains(card.id) ||
+          _generating.contains(card.id)) {
+        reason = '该角色正在生成回复';
+      } else if (scheduledRetryPending) {
+        reason = '定时问候发送失败，等待重试';
+      } else if (scheduledDue) {
+        reason = '定时问候已到时间，可以触发（不受角色冷却限制）';
+      } else if (cooldownActive) {
+        reason = '该角色刚触发过，冷却中';
+      } else if (silenceDue) {
+        reason = '条件已满足，可以触发';
+      } else {
+        reason = '等待下一次触发';
+      }
+
+      rows.add(
+        ProactiveMessageDiagnostic(
+          characterName: card.displayName,
+          reason: reason,
+          dailyCount: state.dailyCount,
+          dailyLimit: characterLimit ?? -1,
+          unansweredCount: state.unansweredCount,
+          maxUnanswered: settings.maxUnanswered,
+          nextSilenceAt: state.nextSilenceAt,
+          lastProactiveAt: state.lastProactiveAt,
+          cooldownRemaining: characterCooldown,
+          firedSlots: state.firedSlots,
+        ),
+      );
+    }
+
+    return ProactiveMessageDiagnostics(
+      globalEnabled: settings.enabled,
+      modelConfigured: modelConfigured,
+      serviceRunning: isRunning,
+      quietNow: quietNow,
+      lastCheckAt: _lastCheckAt,
+      lastError: _lastError,
+      lastErrorAt: _lastErrorAt,
+      totalToday: totalToday,
+      globalDailyLimit: settings.dailyLimit,
+      conversations: List<ProactiveMessageDiagnostic>.unmodifiable(rows),
+    );
   }
 
   void _scheduleTimer() {
@@ -292,17 +417,14 @@ class ProactiveMessageService with WidgetsBindingObserver {
       return;
     }
 
+    final now = DateTime.now();
+    _lastCheckAt = now;
+
     final settings = ProactiveMessageStore.instance.settings.value;
     if (!settings.enabled) {
       return;
     }
     if (!_hasModelConfig()) {
-      return;
-    }
-
-    final now = DateTime.now();
-    if (_lastTriggerAt != null &&
-        now.difference(_lastTriggerAt!) < _globalCooldown) {
       return;
     }
 
@@ -322,6 +444,7 @@ class ProactiveMessageService with WidgetsBindingObserver {
           await _saveState(card.id, state);
         }
         totalToday += state.dailyCount;
+        final characterCooldownActive = _characterCooldownActive(state, now);
 
         if (!state.enabled) {
           continue;
@@ -342,7 +465,9 @@ class ProactiveMessageService with WidgetsBindingObserver {
           continue;
         }
 
-        if (settings.nudgeEnabled && _nudgeDue(state, now)) {
+        if (settings.nudgeEnabled &&
+            !characterCooldownActive &&
+            _nudgeDue(state, now)) {
           best = _DueConversation(
             conversationId: card.id,
             state: state,
@@ -353,19 +478,33 @@ class ProactiveMessageService with WidgetsBindingObserver {
           continue;
         }
 
-        final characterLimit = state.dailyLimit > 0
+        final characterLimit = state.dailyLimit < 0
+            ? null
+            : state.dailyLimit > 0
             ? state.dailyLimit
-            : settings.dailyLimit;
-        if (state.unansweredCount >= settings.maxUnanswered ||
-            state.dailyCount >= characterLimit ||
-            _recentlyProactive(state, now)) {
+            : (settings.dailyLimit < 0 ? null : settings.dailyLimit);
+        final unansweredBlocked =
+            settings.maxUnanswered >= 0 &&
+            state.unansweredCount >= settings.maxUnanswered;
+        final characterLimitBlocked =
+            characterLimit != null && state.dailyCount >= characterLimit;
+        if (unansweredBlocked || characterLimitBlocked) {
           continue;
         }
 
-        final slotKey = settings.scheduledEnabled
+        final scheduledRetryAt = _scheduledRetryAfter[card.id];
+        if (scheduledRetryAt != null && !scheduledRetryAt.isAfter(now)) {
+          _scheduledRetryAfter.remove(card.id);
+        }
+        final scheduledBlocked =
+            scheduledRetryAt != null && scheduledRetryAt.isAfter(now);
+        final slotKey = settings.scheduledEnabled && !scheduledBlocked
             ? _dueScheduledSlot(settings, state, now)
             : null;
-        final silenceDue = settings.silenceEnabled && _silenceDue(state, now);
+        final silenceDue =
+            !characterCooldownActive &&
+            settings.silenceEnabled &&
+            _silenceDue(state, now);
         if (slotKey == null && !silenceDue) {
           continue;
         }
@@ -385,7 +524,9 @@ class ProactiveMessageService with WidgetsBindingObserver {
         }
       }
 
-      if (best == null || (!best.nudge && totalToday >= settings.dailyLimit)) {
+      final globalLimitBlocked =
+          settings.dailyLimit >= 0 && totalToday >= settings.dailyLimit;
+      if (best == null || (!best.nudge && globalLimitBlocked)) {
         return;
       }
       await _trigger(
@@ -393,8 +534,9 @@ class ProactiveMessageService with WidgetsBindingObserver {
         scheduledSlotKey: best.slotKey,
         nudge: best.nudge,
       );
-    } catch (_) {
-      // 自动消息失败不应影响应用其他功能。
+    } catch (error) {
+      _lastError = error.toString();
+      _lastErrorAt = DateTime.now();
     } finally {
       _checking = false;
     }
@@ -427,11 +569,9 @@ class ProactiveMessageService with WidgetsBindingObserver {
       }
 
       // 先占住下一次触发时间，避免生成期间重复触发。
+      // 定时槽位不在这里消费：只有发送成功或模型明确沉默后才标记为已完成。
       state = state.copyWith(
         nextSilenceAtMs: startedAt.add(_retryDelay).millisecondsSinceEpoch,
-        firedSlots: scheduledSlotKey == null
-            ? state.firedSlots
-            : [...state.firedSlots, scheduledSlotKey],
         nudgedMessageId: nudge
             ? state.lastAssistantMessageId
             : state.nudgedMessageId,
@@ -466,14 +606,19 @@ class ProactiveMessageService with WidgetsBindingObserver {
 
       if (content == null) {
         // 模型选择沉默：不写入消息，也不消耗额度和未回复计数。
+        // 这是有意的“不说”，定时槽位视为已完成。
         await _saveState(
           conversationId,
-          state.copyWith(
-            nextSilenceAtMs: startedAt
-                .add(_randomSilence())
-                .millisecondsSinceEpoch,
+          _markScheduledSlot(
+            state.copyWith(
+              nextSilenceAtMs: startedAt
+                  .add(_randomSilence())
+                  .millisecondsSinceEpoch,
+            ),
+            scheduledSlotKey,
           ),
         );
+        _scheduledRetryAfter.remove(conversationId);
         return false;
       }
 
@@ -487,12 +632,16 @@ class ProactiveMessageService with WidgetsBindingObserver {
           // 用户在生成期间发过消息，自动消息让路。
           await _saveState(
             conversationId,
-            state.copyWith(
-              nextSilenceAtMs: startedAt
-                  .add(_randomSilence())
-                  .millisecondsSinceEpoch,
+            _markScheduledSlot(
+              state.copyWith(
+                nextSilenceAtMs: startedAt
+                    .add(_randomSilence())
+                    .millisecondsSinceEpoch,
+              ),
+              scheduledSlotKey,
             ),
           );
+          _scheduledRetryAfter.remove(conversationId);
           await noteUserMessage(conversationId);
           return false;
         }
@@ -500,12 +649,16 @@ class ProactiveMessageService with WidgetsBindingObserver {
           // 生成期间聊天记录被清空，放弃这条消息。
           await _saveState(
             conversationId,
-            state.copyWith(
-              nextSilenceAtMs: startedAt
-                  .add(_randomSilence())
-                  .millisecondsSinceEpoch,
+            _markScheduledSlot(
+              state.copyWith(
+                nextSilenceAtMs: startedAt
+                    .add(_randomSilence())
+                    .millisecondsSinceEpoch,
+              ),
+              scheduledSlotKey,
             ),
           );
+          _scheduledRetryAfter.remove(conversationId);
           return false;
         }
         final userSpoke = latest.any(
@@ -517,12 +670,16 @@ class ProactiveMessageService with WidgetsBindingObserver {
           // 用户正在聊天，自动消息让路。
           await _saveState(
             conversationId,
-            state.copyWith(
-              nextSilenceAtMs: startedAt
-                  .add(_randomSilence())
-                  .millisecondsSinceEpoch,
+            _markScheduledSlot(
+              state.copyWith(
+                nextSilenceAtMs: startedAt
+                    .add(_randomSilence())
+                    .millisecondsSinceEpoch,
+              ),
+              scheduledSlotKey,
             ),
           );
+          _scheduledRetryAfter.remove(conversationId);
           await noteUserMessage(conversationId);
           return false;
         }
@@ -541,22 +698,43 @@ class ProactiveMessageService with WidgetsBindingObserver {
 
       final next = startedAt.add(_randomSilence());
       final countTowardsQuota = !manual && !nudge;
-      state = state.copyWith(
-        lastActivityAtMs: startedAt.millisecondsSinceEpoch,
-        nextSilenceAtMs: next.millisecondsSinceEpoch,
-        lastProactiveAtMs: startedAt.millisecondsSinceEpoch,
-        unansweredCount: countTowardsQuota
-            ? state.unansweredCount + 1
-            : state.unansweredCount,
-        dailyDate: _dateKey(startedAt),
-        dailyCount: countTowardsQuota ? state.dailyCount + 1 : state.dailyCount,
+      state = _markScheduledSlot(
+        state.copyWith(
+          lastActivityAtMs: startedAt.millisecondsSinceEpoch,
+          nextSilenceAtMs: next.millisecondsSinceEpoch,
+          lastProactiveAtMs: startedAt.millisecondsSinceEpoch,
+          unansweredCount: countTowardsQuota
+              ? state.unansweredCount + 1
+              : state.unansweredCount,
+          dailyDate: _dateKey(startedAt),
+          dailyCount: countTowardsQuota
+              ? state.dailyCount + 1
+              : state.dailyCount,
+        ),
+        scheduledSlotKey,
       );
       await _saveState(conversationId, state);
-      _lastTriggerAt = startedAt;
+      _scheduledRetryAfter.remove(conversationId);
+      _lastError = null;
+      _lastErrorAt = null;
       return true;
-    } on ProactiveMessageException {
+    } on ProactiveMessageException catch (error) {
+      _lastError = error.message;
+      _lastErrorAt = DateTime.now();
+      if (scheduledSlotKey != null) {
+        _scheduledRetryAfter[conversationId] = startedAt.add(
+          _scheduledRetryDelay,
+        );
+      }
       rethrow;
-    } catch (_) {
+    } catch (error) {
+      _lastError = error.toString();
+      _lastErrorAt = DateTime.now();
+      if (scheduledSlotKey != null) {
+        _scheduledRetryAfter[conversationId] = startedAt.add(
+          _scheduledRetryDelay,
+        );
+      }
       throw const ProactiveMessageException('生成主动消息失败，请稍后重试。');
     } finally {
       _generating.remove(conversationId);
@@ -586,15 +764,16 @@ class ProactiveMessageService with WidgetsBindingObserver {
         ? history.sublist(history.length - _maxHistoryMessages)
         : history;
     final buffer = StringBuffer();
+    final systemPrompt =
+        '${MoriConfig.buildSystemPrompt(character)}\n\n'
+        '$_proactiveSystemInstruction';
     try {
       await for (final chunk in _chatService.streamChat(
         [...recent, ChatMessage(role: ChatRole.user, content: trigger)],
         provider: provider,
         apiKey: apiKey,
         model: selection.modelId,
-        systemPrompt:
-            '${MoriConfig.buildSystemPrompt(character)}\n\n'
-            '$_proactiveSystemInstruction',
+        systemPrompt: systemPrompt,
         temperature: 0.95,
       )) {
         buffer.write(chunk);
@@ -677,8 +856,10 @@ ${recentMoments.isEmpty ? '' : '你最近发过的动态（可以作为主动聊
     DateTime now,
   ) {
     final lines = <String>[];
-    for (final raw in content.split(RegExp(r'\r?\n'))) {
-      final line = _normalize(raw, character.displayName);
+    for (final part in splitChatReply(content, maxBubbles: _maxBubbles)) {
+      final line = flattenChatBubbleText(
+        _normalize(part, character.displayName),
+      );
       if (line.isNotEmpty) {
         lines.add(
           line.length > _maxBubbleLength
@@ -687,17 +868,14 @@ ${recentMoments.isEmpty ? '' : '你最近发过的动态（可以作为主动聊
         );
       }
     }
-    final selected = lines.isEmpty
-        ? const <String>[]
-        : lines.take(_maxBubbles).toList(growable: false);
     return [
-      for (var index = 0; index < selected.length; index++)
+      for (var index = 0; index < lines.length; index++)
         ChatMessage(
           id:
               '${now.microsecondsSinceEpoch}_proactive_'
               '${index}_${_random.nextInt(100000)}',
           role: ChatRole.assistant,
-          content: selected[index],
+          content: lines[index],
           createdAt: now.add(Duration(milliseconds: index)),
         ),
     ];
@@ -771,6 +949,16 @@ ${recentMoments.isEmpty ? '' : '你最近发过的动态（可以作为主动聊
     return ProactiveMessageStore.instance.saveState(conversationId, state);
   }
 
+  ProactiveMessageState _markScheduledSlot(
+    ProactiveMessageState state,
+    String? slotKey,
+  ) {
+    if (slotKey == null || state.firedSlots.contains(slotKey)) {
+      return state;
+    }
+    return state.copyWith(firedSlots: [...state.firedSlots, slotKey]);
+  }
+
   ProactiveMessageState _rollover(ProactiveMessageState state, DateTime now) {
     final today = _dateKey(now);
     if (state.dailyDate == today) {
@@ -828,10 +1016,22 @@ ${recentMoments.isEmpty ? '' : '你最近发过的动态（可以作为主动聊
     return _silenceMarkers.any(trimmed.contains);
   }
 
-  bool _recentlyProactive(ProactiveMessageState state, DateTime now) {
-    return state.lastProactiveAtMs > 0 &&
-        now.millisecondsSinceEpoch - state.lastProactiveAtMs <
-            _globalCooldown.inMilliseconds;
+  bool _characterCooldownActive(ProactiveMessageState state, DateTime now) {
+    return _characterCooldownRemaining(state, now) != null;
+  }
+
+  Duration? _characterCooldownRemaining(
+    ProactiveMessageState state,
+    DateTime now,
+  ) {
+    if (state.lastProactiveAtMs <= 0) {
+      return null;
+    }
+    final elapsed = now.millisecondsSinceEpoch - state.lastProactiveAtMs;
+    if (elapsed >= _characterCooldown.inMilliseconds) {
+      return null;
+    }
+    return Duration(milliseconds: _characterCooldown.inMilliseconds - elapsed);
   }
 
   String? _dueScheduledSlot(
@@ -890,7 +1090,14 @@ ${recentMoments.isEmpty ? '' : '你最近发过的动态（可以作为主动聊
     final min = settings.silenceMinMinutes;
     final max = settings.silenceMaxMinutes;
     final span = max - min;
-    final minutes = min + (span <= 0 ? 0 : _random.nextInt(span + 1));
+    final int minutes;
+    if (span <= 0) {
+      minutes = min;
+    } else if (span > 0x7fffffff) {
+      minutes = min + (_random.nextDouble() * span).round();
+    } else {
+      minutes = min + _random.nextInt(span + 1);
+    }
     return Duration(minutes: minutes);
   }
 
@@ -958,8 +1165,60 @@ ${recentMoments.isEmpty ? '' : '你最近发过的动态（可以作为主动聊
   }
 
   String _slotKey(DateTime time) {
-    return '${_dateKey(time)}|$_timeLabel(time)';
+    return '${_dateKey(time)}|${_timeLabel(time)}';
   }
+}
+
+class ProactiveMessageDiagnostics {
+  const ProactiveMessageDiagnostics({
+    required this.globalEnabled,
+    required this.modelConfigured,
+    required this.serviceRunning,
+    required this.quietNow,
+    required this.lastCheckAt,
+    required this.lastError,
+    required this.lastErrorAt,
+    required this.totalToday,
+    required this.globalDailyLimit,
+    required this.conversations,
+  });
+
+  final bool globalEnabled;
+  final bool modelConfigured;
+  final bool serviceRunning;
+  final bool quietNow;
+  final DateTime? lastCheckAt;
+  final String? lastError;
+  final DateTime? lastErrorAt;
+  final int totalToday;
+  final int globalDailyLimit;
+  final List<ProactiveMessageDiagnostic> conversations;
+}
+
+class ProactiveMessageDiagnostic {
+  const ProactiveMessageDiagnostic({
+    required this.characterName,
+    required this.reason,
+    required this.dailyCount,
+    required this.dailyLimit,
+    required this.unansweredCount,
+    required this.maxUnanswered,
+    required this.nextSilenceAt,
+    required this.lastProactiveAt,
+    required this.cooldownRemaining,
+    required this.firedSlots,
+  });
+
+  final String characterName;
+  final String reason;
+  final int dailyCount;
+  final int dailyLimit;
+  final int unansweredCount;
+  final int maxUnanswered;
+  final DateTime? nextSilenceAt;
+  final DateTime? lastProactiveAt;
+  final Duration? cooldownRemaining;
+  final List<String> firedSlots;
 }
 
 class _DueConversation {

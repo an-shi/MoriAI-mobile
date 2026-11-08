@@ -16,10 +16,8 @@ class ProactiveMessageSettings {
 
   static const defaults = ProactiveMessageSettings();
 
-  static const minSilenceMinutes = 15;
-  static const maxSilenceMinutes = 360;
-  static const maxDailyLimit = 20;
-  static const maxUnansweredLimit = 10;
+  static const minSilenceMinutes = 1;
+  static const unlimited = -1;
 
   final bool enabled;
   final bool silenceEnabled;
@@ -84,14 +82,10 @@ class ProactiveMessageSettings {
   }
 
   ProactiveMessageSettings normalized() {
-    final safeMin = silenceMinMinutes.clamp(
-      minSilenceMinutes,
-      maxSilenceMinutes - minSilenceMinutes,
-    );
-    final safeMax = silenceMaxMinutes.clamp(
-      safeMin + minSilenceMinutes,
-      maxSilenceMinutes,
-    );
+    final safeMin = silenceMinMinutes < minSilenceMinutes
+        ? minSilenceMinutes
+        : silenceMinMinutes;
+    final safeMax = silenceMaxMinutes < safeMin ? safeMin : silenceMaxMinutes;
     final times = <String>[];
     final seen = <int>{};
     for (final raw in scheduledTimes) {
@@ -108,14 +102,21 @@ class ProactiveMessageSettings {
       scheduledEnabled: scheduledEnabled,
       silenceMinMinutes: safeMin,
       silenceMaxMinutes: safeMax,
-      dailyLimit: dailyLimit.clamp(1, maxDailyLimit),
-      maxUnanswered: maxUnanswered.clamp(1, maxUnansweredLimit),
+      dailyLimit: _normalizeLimit(dailyLimit),
+      maxUnanswered: _normalizeLimit(maxUnanswered),
       nudgeEnabled: nudgeEnabled,
       quietHoursEnabled: quietHoursEnabled,
       quietStartMinutes: quietStartMinutes.clamp(0, 24 * 60 - 1),
       quietEndMinutes: quietEndMinutes.clamp(0, 24 * 60 - 1),
       scheduledTimes: List<String>.unmodifiable(times),
     );
+  }
+
+  static int _normalizeLimit(int value) {
+    if (value < 0) {
+      return unlimited;
+    }
+    return value;
   }
 
   ProactiveMessageSettings copyWith({

@@ -46,15 +46,16 @@ class ProactiveMessageState {
   ProactiveMessageState normalized() {
     final slots = <String>[];
     final seen = <String>{};
+    final slotPattern = RegExp(r'^\d{4}-\d{2}-\d{2}\|\d{2}:\d{2}$');
     for (final slot in firedSlots) {
       final normalized = slot.trim();
-      if (normalized.isNotEmpty && seen.add(normalized)) {
+      if (slotPattern.hasMatch(normalized) && seen.add(normalized)) {
         slots.add(normalized);
       }
     }
     return ProactiveMessageState(
       enabled: enabled,
-      dailyLimit: dailyLimit.clamp(0, 20),
+      dailyLimit: dailyLimit < 0 ? -1 : dailyLimit,
       lastActivityAtMs: lastActivityAtMs < 0 ? 0 : lastActivityAtMs,
       nextSilenceAtMs: nextSilenceAtMs < 0 ? 0 : nextSilenceAtMs,
       lastProactiveAtMs: lastProactiveAtMs < 0 ? 0 : lastProactiveAtMs,

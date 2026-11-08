@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/proactive_message_settings.dart';
@@ -5,6 +7,7 @@ import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
+import 'package:mori_ai/widgets/number_setting_field.dart';
 
 class ProactiveMessageSettingsPage extends StatefulWidget {
   const ProactiveMessageSettingsPage({super.key});
@@ -18,6 +21,7 @@ class _ProactiveMessageSettingsPageState
     extends State<ProactiveMessageSettingsPage> {
   late ProactiveMessageSettings _settings;
   bool _testing = false;
+  bool _diagnosing = false;
 
   @override
   void initState() {
@@ -192,6 +196,34 @@ class _ProactiveMessageSettingsPageState
     }
   }
 
+  Future<void> _openDiagnostics() async {
+    if (_diagnosing) {
+      return;
+    }
+    setState(() => _diagnosing = true);
+    try {
+      final diagnostics = await ProactiveMessageService.instance.diagnose();
+      if (!mounted) {
+        return;
+      }
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (_) => _DiagnosticsSheet(initial: diagnostics),
+      );
+    } catch (_) {
+      if (mounted) {
+        _showSnackBar('读取自动消息状态失败，请重试');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _diagnosing = false);
+      }
+    }
+  }
+
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -239,6 +271,35 @@ class _ProactiveMessageSettingsPageState
             ),
           ),
           const SizedBox(height: 12),
+          Card(
+            elevation: 0,
+            color: colors.surfaceContainerLow,
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 6,
+              ),
+              leading: Icon(
+                Icons.monitor_heart_outlined,
+                color: colors.primary,
+              ),
+              title: const Text('运行诊断'),
+              subtitle: const Text('检查自动消息为什么没有触发'),
+              trailing: _diagnosing
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.chevron_right_rounded),
+              onTap: _diagnosing ? null : _openDiagnostics,
+            ),
+          ),
+          const SizedBox(height: 12),
           _SettingsCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,56 +328,33 @@ class _ProactiveMessageSettingsPageState
                     color: colors.onSurfaceVariant,
                   ),
                 ),
-                RangeSlider(
-                  values: RangeValues(
-                    _settings.silenceMinMinutes.toDouble(),
-                    _settings.silenceMaxMinutes.toDouble(),
-                  ),
-                  min: ProactiveMessageSettings.minSilenceMinutes.toDouble(),
-                  max: ProactiveMessageSettings.maxSilenceMinutes.toDouble(),
-                  divisions:
-                      (ProactiveMessageSettings.maxSilenceMinutes -
-                          ProactiveMessageSettings.minSilenceMinutes) ~/
-                      ProactiveMessageSettings.minSilenceMinutes,
-                  labels: RangeLabels(
-                    '${_settings.silenceMinMinutes} 分钟',
-                    '${_settings.silenceMaxMinutes} 分钟',
-                  ),
-                  onChanged: _settings.silenceEnabled
-                      ? (value) {
-                          final minimum = value.start.round().clamp(
-                            ProactiveMessageSettings.minSilenceMinutes,
-                            ProactiveMessageSettings.maxSilenceMinutes -
-                                ProactiveMessageSettings.minSilenceMinutes,
-                          );
-                          final maximum = value.end.round().clamp(
-                            minimum +
-                                ProactiveMessageSettings.minSilenceMinutes,
-                            ProactiveMessageSettings.maxSilenceMinutes,
-                          );
-                          _update(
-                            _settings.copyWith(
-                              silenceMinMinutes: minimum,
-                              silenceMaxMinutes: maximum,
-                            ),
-                          );
-                        }
-                      : null,
-                  onChangeEnd: (value) => _save(),
-                ),
+                const SizedBox(height: 12),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${ProactiveMessageSettings.minSilenceMinutes} 分钟',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: colors.onSurfaceVariant,
+                    Expanded(
+                      child: NumberSettingField(
+                        label: '最短间隔（分钟）',
+                        value: _settings.silenceMinMinutes,
+                        min: ProactiveMessageSettings.minSilenceMinutes,
+                        helperText: '至少 1 分钟，可填写任意更大的值。',
+                        onChanged: (value) {
+                          _update(_settings.copyWith(silenceMinMinutes: value));
+                          unawaited(_save());
+                        },
                       ),
                     ),
-                    Text(
-                      '${ProactiveMessageSettings.maxSilenceMinutes ~/ 60} 小时',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: colors.onSurfaceVariant,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: NumberSettingField(
+                        label: '最长间隔（分钟）',
+                        value: _settings.silenceMaxMinutes,
+                        min: ProactiveMessageSettings.minSilenceMinutes,
+                        helperText: '至少 1 分钟，且不小于最短间隔。',
+                        onChanged: (value) {
+                          _update(_settings.copyWith(silenceMaxMinutes: value));
+                          unawaited(_save());
+                        },
                       ),
                     ),
                   ],
@@ -454,38 +492,32 @@ class _ProactiveMessageSettingsPageState
                   subtitle: '避免连续主动消息过多，用户回复后会重新计数。',
                 ),
                 const SizedBox(height: 14),
-                Text(
-                  '所有单聊每天最多主动 ${_settings.dailyLimit} 条',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                NumberSettingField(
+                  label: '所有单聊每日总上限',
+                  value: _settings.dailyLimit,
+                  min: 0,
+                  allowUnlimited: true,
+                  helperText: _settings.dailyLimit < 0
+                      ? '当前无上限；输入 0 或正整数可恢复为具体数值。'
+                      : '当前 ${_settings.dailyLimit} 条，可填写任意非负整数；负数表示无上限。',
+                  onChanged: (value) {
+                    _update(_settings.copyWith(dailyLimit: value));
+                    unawaited(_save());
+                  },
                 ),
-                Slider(
-                  value: _settings.dailyLimit.toDouble(),
-                  min: 1,
-                  max: ProactiveMessageSettings.maxDailyLimit.toDouble(),
-                  divisions: ProactiveMessageSettings.maxDailyLimit - 1,
-                  label: '${_settings.dailyLimit} 条',
-                  onChanged: (value) =>
-                      _update(_settings.copyWith(dailyLimit: value.round())),
-                  onChangeEnd: (value) => _save(),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '连续 ${_settings.maxUnanswered} 条没有回复后暂停',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Slider(
-                  value: _settings.maxUnanswered.toDouble(),
-                  min: 1,
-                  max: ProactiveMessageSettings.maxUnansweredLimit.toDouble(),
-                  divisions: ProactiveMessageSettings.maxUnansweredLimit - 1,
-                  label: '${_settings.maxUnanswered} 条',
-                  onChanged: (value) =>
-                      _update(_settings.copyWith(maxUnanswered: value.round())),
-                  onChangeEnd: (value) => _save(),
+                const SizedBox(height: 14),
+                NumberSettingField(
+                  label: '连续未回复上限',
+                  value: _settings.maxUnanswered,
+                  min: 0,
+                  allowUnlimited: true,
+                  helperText: _settings.maxUnanswered < 0
+                      ? '当前无上限；输入 0 或正整数可恢复为具体数值。'
+                      : '当前 ${_settings.maxUnanswered} 条，可填写任意非负整数；负数表示无上限。',
+                  onChanged: (value) {
+                    _update(_settings.copyWith(maxUnanswered: value));
+                    unawaited(_save());
+                  },
                 ),
               ],
             ),
@@ -569,4 +601,308 @@ class _SettingsCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DiagnosticsSheet extends StatefulWidget {
+  const _DiagnosticsSheet({required this.initial});
+
+  final ProactiveMessageDiagnostics initial;
+
+  @override
+  State<_DiagnosticsSheet> createState() => _DiagnosticsSheetState();
+}
+
+class _DiagnosticsSheetState extends State<_DiagnosticsSheet> {
+  late ProactiveMessageDiagnostics _diagnostics;
+  bool _checking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _diagnostics = widget.initial;
+  }
+
+  Future<void> _checkNow() async {
+    if (_checking) {
+      return;
+    }
+    setState(() => _checking = true);
+    try {
+      await ProactiveMessageService.instance.checkNow();
+      final diagnostics = await ProactiveMessageService.instance.diagnose();
+      if (mounted) {
+        setState(() => _diagnostics = diagnostics);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('检查失败，请重试')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _checking = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final diagnostics = _diagnostics;
+
+    return FractionallySizedBox(
+      heightFactor: 0.88,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '自动消息诊断',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _checking ? null : _checkNow,
+                  icon: _checking
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh_rounded, size: 18),
+                  label: Text(_checking ? '检查中…' : '立即检查一次'),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                Text(
+                  '自动消息只在应用前台或从后台恢复时运行。',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _DiagnosticRow(
+                  label: '全局开关',
+                  value: diagnostics.globalEnabled ? '已开启' : '已关闭',
+                  ok: diagnostics.globalEnabled,
+                ),
+                _DiagnosticRow(
+                  label: '模型配置',
+                  value: diagnostics.modelConfigured ? '已配置' : '未配置',
+                  ok: diagnostics.modelConfigured,
+                ),
+                _DiagnosticRow(
+                  label: '服务状态',
+                  value: diagnostics.serviceRunning ? '运行中' : '未运行',
+                  ok: diagnostics.serviceRunning,
+                ),
+                _DiagnosticRow(
+                  label: '免打扰',
+                  value: diagnostics.quietNow ? '当前处于免打扰' : '未处于免打扰',
+                  ok: !diagnostics.quietNow,
+                ),
+                _DiagnosticRow(
+                  label: '今日总量',
+                  value:
+                      '${diagnostics.totalToday}/${_limitLabel(diagnostics.globalDailyLimit)}',
+                  ok:
+                      diagnostics.globalDailyLimit < 0 ||
+                      diagnostics.totalToday < diagnostics.globalDailyLimit,
+                ),
+                _DiagnosticRow(
+                  label: '上次检查',
+                  value: _formatDateTime(diagnostics.lastCheckAt),
+                  ok: diagnostics.lastCheckAt != null,
+                ),
+                if (diagnostics.lastError != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: colors.errorContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '最近错误（${_formatDateTime(diagnostics.lastErrorAt)}）：'
+                      '${diagnostics.lastError}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onErrorContainer,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Text(
+                  '角色状态',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (diagnostics.conversations.isEmpty)
+                  Text(
+                    '还没有角色卡。',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                for (final item in diagnostics.conversations)
+                  Card(
+                    elevation: 0,
+                    color: colors.surfaceContainerLow,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    clipBehavior: Clip.antiAlias,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  item.characterName,
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                item.reason,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: item.reason == '条件已满足，可以触发'
+                                      ? colors.primary
+                                      : colors.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '今日 ${item.dailyCount}/${_limitLabel(item.dailyLimit)} · '
+                            '未回复 ${item.unansweredCount}/${_limitLabel(item.maxUnanswered)}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '下次沉默：${_formatDateTime(item.nextSilenceAt)} · '
+                            '上次主动：${_formatDateTime(item.lastProactiveAt)}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                          if (item.cooldownRemaining != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              '角色冷却剩余：${_formatRemaining(item.cooldownRemaining)}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                          if (item.firedSlots.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              '今日已触发定时：${item.firedSlots.join('、')}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DiagnosticRow extends StatelessWidget {
+  const _DiagnosticRow({
+    required this.label,
+    required this.value,
+    required this.ok,
+  });
+
+  final String label;
+  final String value;
+  final bool ok;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Icon(
+            ok
+                ? Icons.check_circle_outline_rounded
+                : Icons.info_outline_rounded,
+            size: 16,
+            color: ok ? colors.primary : colors.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Text(value, style: theme.textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
+String _limitLabel(int limit) {
+  return limit < 0 ? '无上限' : '$limit';
+}
+
+String _formatRemaining(Duration? duration) {
+  if (duration == null || duration.isNegative || duration == Duration.zero) {
+    return '无冷却';
+  }
+  final minutes = duration.inMinutes;
+  final seconds = duration.inSeconds % 60;
+  if (minutes <= 0) {
+    return '$seconds 秒';
+  }
+  return '$minutes 分 $seconds 秒';
+}
+
+String _formatDateTime(DateTime? time) {
+  if (time == null) {
+    return '暂无';
+  }
+  return '${time.month.toString().padLeft(2, '0')}-'
+      '${time.day.toString().padLeft(2, '0')} '
+      '${time.hour.toString().padLeft(2, '0')}:'
+      '${time.minute.toString().padLeft(2, '0')}';
 }

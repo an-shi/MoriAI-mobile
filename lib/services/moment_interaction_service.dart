@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math';
 
 import 'package:mori_ai/models/character_profile.dart';
@@ -25,6 +24,8 @@ class MomentInteractionService implements MomentInteractions {
       _random = random ?? Random();
 
   static final MomentInteractionService instance = MomentInteractionService();
+
+  static const _maxUnlimitedReplyDepth = 50;
 
   final MomentGenerator _generator;
   final Random _random;
@@ -74,7 +75,9 @@ class MomentInteractionService implements MomentInteractions {
       for (final card in candidates)
         if (!existingCommenters.contains(card.id)) card,
     ];
-    final targetComments = min(settings.autoCommentCount, candidates.length);
+    final targetComments = settings.autoCommentCount < 0
+        ? candidates.length
+        : min(settings.autoCommentCount, candidates.length);
     final remainingComments = targetComments - existingCommenters.length;
     if (remainingComments <= 0 || commenters.isEmpty) {
       return;
@@ -116,7 +119,7 @@ class MomentInteractionService implements MomentInteractions {
     }
 
     final settings = MomentInteractionSettingsStore.instance.settings.value;
-    if (settings.autoReplyDepth <= 0) {
+    if (settings.autoReplyDepth == 0) {
       return;
     }
 
@@ -160,8 +163,8 @@ class MomentInteractionService implements MomentInteractions {
     MomentComment target,
     MomentInteractionSettings settings,
   ) async {
-    final joinerCount = settings.autoCommentCount - 1;
-    if (joinerCount <= 0 || target.replyDepth >= settings.autoReplyDepth) {
+    final replyDepthLimit = _replyDepthLimit(settings);
+    if (target.replyDepth >= replyDepthLimit) {
       return;
     }
 
@@ -182,6 +185,12 @@ class MomentInteractionService implements MomentInteractions {
       return;
     }
 
+    final joinerCount = settings.autoCommentCount < 0
+        ? candidates.length
+        : settings.autoCommentCount - 1;
+    if (joinerCount <= 0) {
+      return;
+    }
     final selected = candidates
         .take(min(joinerCount, candidates.length))
         .toList(growable: false);
@@ -203,8 +212,9 @@ class MomentInteractionService implements MomentInteractions {
     MomentComment start,
     MomentInteractionSettings settings,
   ) async {
+    final replyDepthLimit = _replyDepthLimit(settings);
     var replyTo = start;
-    while (replyTo.replyDepth < settings.autoReplyDepth) {
+    while (replyTo.replyDepth < replyDepthLimit) {
       final latest = MomentStore.instance.momentById(moment.id);
       if (latest == null ||
           latest.comments.any((item) => item.replyToCommentId == replyTo.id)) {
@@ -225,6 +235,12 @@ class MomentInteractionService implements MomentInteractions {
       }
       replyTo = reply;
     }
+  }
+
+  int _replyDepthLimit(MomentInteractionSettings settings) {
+    return settings.autoReplyDepth < 0
+        ? _maxUnlimitedReplyDepth
+        : settings.autoReplyDepth;
   }
 
   CharacterProfile? _pickResponder(Moment moment, MomentComment replyTo) {
@@ -282,13 +298,14 @@ class MomentInteractionService implements MomentInteractions {
     String content,
   ) async {
     try {
-      return await MomentStore.instance.addComment(
+      final comment = await MomentStore.instance.addComment(
         moment.id,
         authorId: character.id,
         authorName: character.displayName,
         isUser: false,
         content: content,
       );
+      return comment;
     } catch (_) {
       return null;
     }
@@ -309,7 +326,7 @@ class MomentInteractionService implements MomentInteractions {
     }
 
     try {
-      return await MomentStore.instance.addComment(
+      final comment = await MomentStore.instance.addComment(
         latest.id,
         authorId: character.id,
         authorName: character.displayName,
@@ -321,6 +338,7 @@ class MomentInteractionService implements MomentInteractions {
             : replyTo.authorName,
         replyDepth: replyTo.replyDepth + 1,
       );
+      return comment;
     } catch (_) {
       return null;
     }

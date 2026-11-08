@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mori_ai/models/moment_interaction_settings.dart';
 import 'package:mori_ai/services/moment_interaction_settings_store.dart';
+import 'package:mori_ai/widgets/number_setting_field.dart';
 
 class MomentInteractionSettingsPage extends StatefulWidget {
   const MomentInteractionSettingsPage({super.key});
@@ -72,40 +75,25 @@ class _MomentInteractionSettingsPageState
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '每条新动态随机选择 ${_settings.autoCommentCount} 个角色评论；设为 2 以上时，也会有额外角色加入同一条评论的回复。',
+                  '每条新动态随机选择角色评论。0 表示关闭；负数表示不限制人数，所有可用角色都会参与。',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colors.onSurfaceVariant,
                   ),
                 ),
-                Slider(
-                  value: _settings.autoCommentCount.toDouble(),
-                  min: 0,
-                  max: MomentInteractionSettings.maxCommentCount.toDouble(),
-                  divisions: MomentInteractionSettings.maxCommentCount,
-                  label: '${_settings.autoCommentCount} 人',
+                const SizedBox(height: 12),
+                NumberSettingField(
+                  label: '人数',
+                  value: _settings.autoCommentCount,
+                  allowUnlimited: true,
+                  helperText: _settings.autoCommentCount < 0
+                      ? '当前无上限。'
+                      : _settings.autoCommentCount == 0
+                      ? '当前关闭。'
+                      : '当前 ${_settings.autoCommentCount} 人。',
                   onChanged: (value) {
-                    _update(
-                      _settings.copyWith(autoCommentCount: value.round()),
-                    );
+                    _update(_settings.copyWith(autoCommentCount: value));
+                    unawaited(_save());
                   },
-                  onChangeEnd: (value) => _save(),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '0 人（关闭）',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                    Text(
-                      '${MomentInteractionSettings.maxCommentCount} 人',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -123,7 +111,7 @@ class _MomentInteractionSettingsPageState
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '角色自动回复最多嵌套 ${_settings.autoReplyDepth} 层。',
+                  '角色自动回复最多嵌套的层数。0 表示关闭；正整数表示具体层数；负数表示不限制层数，内部最多执行 50 层。',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colors.onSurfaceVariant,
                   ),
@@ -135,33 +123,20 @@ class _MomentInteractionSettingsPageState
                     color: colors.onSurfaceVariant,
                   ),
                 ),
-                Slider(
-                  value: _settings.autoReplyDepth.toDouble(),
-                  min: 0,
-                  max: MomentInteractionSettings.maxReplyDepth.toDouble(),
-                  divisions: MomentInteractionSettings.maxReplyDepth,
-                  label: '${_settings.autoReplyDepth} 层',
+                const SizedBox(height: 12),
+                NumberSettingField(
+                  label: '层数',
+                  value: _settings.autoReplyDepth,
+                  allowUnlimited: true,
+                  helperText: _settings.autoReplyDepth < 0
+                      ? '当前无上限。'
+                      : _settings.autoReplyDepth == 0
+                      ? '当前关闭。'
+                      : '当前 ${_settings.autoReplyDepth} 层。',
                   onChanged: (value) {
-                    _update(_settings.copyWith(autoReplyDepth: value.round()));
+                    _update(_settings.copyWith(autoReplyDepth: value));
+                    unawaited(_save());
                   },
-                  onChangeEnd: (value) => _save(),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '0 层（关闭）',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                    Text(
-                      '${MomentInteractionSettings.maxReplyDepth} 层',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),

@@ -12,6 +12,7 @@ import 'package:mori_ai/models/model_settings.dart';
 import 'package:mori_ai/models/proactive_message_settings.dart';
 import 'package:mori_ai/models/proactive_message_state.dart';
 import 'package:mori_ai/services/api_key_store.dart';
+import 'package:mori_ai/services/character_activity_store.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
@@ -27,6 +28,7 @@ void main() {
     await CharacterStore.instance.load();
     await ModelStore.instance.load();
     await ProactiveMessageStore.instance.load();
+    await CharacterActivityStore.instance.load();
     await ModelStore.instance.saveModels(
       ModelProviderCatalog.defaultProviderId,
       const [
@@ -54,6 +56,7 @@ void main() {
     await CharacterStore.instance.load();
     await ModelStore.instance.load();
     await ProactiveMessageStore.instance.load();
+    await CharacterActivityStore.instance.load();
   });
 
   test('manual trigger appends cleaned proactive bubbles', () async {
@@ -298,6 +301,478 @@ void main() {
       CharacterProfile.presetMoriId,
     );
     expect(history, hasLength(1));
+  });
+
+  test('scheduled greeting fires and marks the slot', () async {
+    final now = DateTime.now();
+    final scheduledTime = ProactiveMessageSettings.formatTimeOfDay(
+      now.hour * 60 + now.minute,
+    );
+    final client = MockClient.streaming((_, _) async {
+      const sse =
+          'data: {"choices":[{"delta":{"content":"早上好。"}}]}\n'
+          'data: [DONE]\n';
+      return http.StreamedResponse(
+        Stream.value(utf8.encode(sse)),
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      );
+    });
+    final chatService = ChatService(client: client);
+    addTearDown(chatService.dispose);
+    final service = ProactiveMessageService.test(
+      chatService: chatService,
+      random: _AlwaysZeroRandom(),
+    );
+
+    await ProactiveMessageStore.instance.saveSettings(
+      ProactiveMessageSettings(
+        enabled: true,
+        silenceEnabled: false,
+        scheduledEnabled: true,
+        quietHoursEnabled: false,
+        scheduledTimes: [scheduledTime],
+      ),
+    );
+    await ChatHistoryStore.instance.saveFor(CharacterProfile.presetMoriId, [
+      ChatMessage(
+        id: 'user_scheduled',
+        role: ChatRole.user,
+        content: '明天见。',
+        createdAt: now.subtract(const Duration(hours: 3)),
+      ),
+    ]);
+    await ProactiveMessageStore.instance.saveState(
+      CharacterProfile.presetMoriId,
+      ProactiveMessageState(
+        lastActivityAtMs: now
+            .subtract(const Duration(hours: 2))
+            .millisecondsSinceEpoch,
+        nextSilenceAtMs: now
+            .add(const Duration(hours: 2))
+            .millisecondsSinceEpoch,
+        dailyDate: _dateKey(now),
+      ),
+    );
+
+    await service.runCheckForTest();
+
+    final history = await ChatHistoryStore.instance.loadFor(
+      CharacterProfile.presetMoriId,
+    );
+    expect(history, hasLength(2));
+    expect(history.last.content, '早上好。');
+
+    final state = await ProactiveMessageStore.instance.loadState(
+      CharacterProfile.presetMoriId,
+    );
+    expect(state?.firedSlots, contains('${_dateKey(now)}|$scheduledTime'));
+  });
+
+  test('scheduled greeting waits when the chat has no history', () async {
+    final now = DateTime.now();
+    final scheduledTime = ProactiveMessageSettings.formatTimeOfDay(
+      now.hour * 60 + now.minute,
+    );
+    final client = MockClient.streaming((_, _) async {
+      fail('a chat without history should not call the model');
+    });
+    final chatService = ChatService(client: client);
+    addTearDown(chatService.dispose);
+    final service = ProactiveMessageService.test(
+      chatService: chatService,
+      random: _AlwaysZeroRandom(),
+    );
+
+    await ProactiveMessageStore.instance.saveSettings(
+      ProactiveMessageSettings(
+        enabled: true,
+        silenceEnabled: false,
+        scheduledEnabled: true,
+        quietHoursEnabled: false,
+        scheduledTimes: [scheduledTime],
+      ),
+    );
+    await ProactiveMessageStore.instance.saveState(
+      CharacterProfile.presetMoriId,
+      ProactiveMessageState(
+        lastActivityAtMs: now
+            .subtract(const Duration(hours: 2))
+            .millisecondsSinceEpoch,
+        nextSilenceAtMs: now
+            .add(const Duration(hours: 2))
+            .millisecondsSinceEpoch,
+        dailyDate: _dateKey(now),
+      ),
+    );
+
+    await service.runCheckForTest();
+
+    expect(
+      await ChatHistoryStore.instance.loadFor(CharacterProfile.presetMoriId),
+      isEmpty,
+    );
+    final state = await ProactiveMessageStore.instance.loadState(
+      CharacterProfile.presetMoriId,
+    );
+    expect(state?.firedSlots, isEmpty);
+  });
+
+  test('scheduled greeting bypasses the character cooldown', () async {
+    final now = DateTime.now();
+    final scheduledTime = ProactiveMessageSettings.formatTimeOfDay(
+      now.hour * 60 + now.minute,
+    );
+    var calls = 0;
+    final client = MockClient.streaming((_, _) async {
+      calls++;
+      const sse =
+          'data: {"choices":[{"delta":{"content":"晚上好。"}}]}\n'
+          'data: [DONE]\n';
+      return http.StreamedResponse(
+        Stream.value(utf8.encode(sse)),
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      );
+    });
+    final chatService = ChatService(client: client);
+    addTearDown(chatService.dispose);
+    final service = ProactiveMessageService.test(
+      chatService: chatService,
+      random: _AlwaysZeroRandom(),
+    );
+
+    await ProactiveMessageStore.instance.saveSettings(
+      ProactiveMessageSettings(
+        enabled: true,
+        silenceEnabled: false,
+        scheduledEnabled: true,
+        quietHoursEnabled: false,
+        scheduledTimes: [scheduledTime],
+      ),
+    );
+    await ChatHistoryStore.instance.saveFor(CharacterProfile.presetMoriId, [
+      ChatMessage(
+        id: 'user_scheduled_cooldown',
+        role: ChatRole.user,
+        content: '等会儿聊。',
+        createdAt: now.subtract(const Duration(hours: 3)),
+      ),
+    ]);
+    await ProactiveMessageStore.instance.saveState(
+      CharacterProfile.presetMoriId,
+      ProactiveMessageState(
+        lastActivityAtMs: now
+            .subtract(const Duration(hours: 2))
+            .millisecondsSinceEpoch,
+        nextSilenceAtMs: now
+            .add(const Duration(hours: 2))
+            .millisecondsSinceEpoch,
+        dailyDate: _dateKey(now),
+      ),
+    );
+
+    // 手动触发成功后，该角色进入 5 分钟冷却。
+    await service.triggerNow(CharacterProfile.presetMoriId);
+    expect(calls, 1);
+
+    final diagnostics = await service.diagnose();
+    expect(diagnostics.conversations.single.cooldownRemaining, isNotNull);
+    expect(diagnostics.conversations.single.reason, contains('不受角色冷却限制'));
+
+    await service.runCheckForTest();
+
+    expect(calls, 2);
+    final history = await ChatHistoryStore.instance.loadFor(
+      CharacterProfile.presetMoriId,
+    );
+    expect(history.last.content, '晚上好。');
+    final state = await ProactiveMessageStore.instance.loadState(
+      CharacterProfile.presetMoriId,
+    );
+    expect(state?.firedSlots, contains('${_dateKey(now)}|$scheduledTime'));
+  });
+
+  test('silence trigger still respects the character cooldown', () async {
+    final now = DateTime.now();
+    var calls = 0;
+    final client = MockClient.streaming((_, _) async {
+      calls++;
+      const sse =
+          'data: {"choices":[{"delta":{"content":"晚上好。"}}]}\n'
+          'data: [DONE]\n';
+      return http.StreamedResponse(
+        Stream.value(utf8.encode(sse)),
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      );
+    });
+    final chatService = ChatService(client: client);
+    addTearDown(chatService.dispose);
+    final service = ProactiveMessageService.test(
+      chatService: chatService,
+      random: _AlwaysZeroRandom(),
+    );
+
+    await ProactiveMessageStore.instance.saveSettings(
+      const ProactiveMessageSettings(
+        enabled: true,
+        silenceEnabled: true,
+        scheduledEnabled: false,
+        nudgeEnabled: false,
+        quietHoursEnabled: false,
+      ),
+    );
+    await ChatHistoryStore.instance.saveFor(CharacterProfile.presetMoriId, [
+      ChatMessage(
+        id: 'user_silence_cooldown',
+        role: ChatRole.user,
+        content: '先这样。',
+        createdAt: now.subtract(const Duration(hours: 2)),
+      ),
+    ]);
+    await ProactiveMessageStore.instance.saveState(
+      CharacterProfile.presetMoriId,
+      ProactiveMessageState(
+        lastActivityAtMs: now
+            .subtract(const Duration(hours: 1))
+            .millisecondsSinceEpoch,
+        nextSilenceAtMs: now
+            .add(const Duration(hours: 2))
+            .millisecondsSinceEpoch,
+        dailyDate: _dateKey(now),
+      ),
+    );
+
+    await service.triggerNow(CharacterProfile.presetMoriId);
+    expect(calls, 1);
+
+    final state = await ProactiveMessageStore.instance.loadState(
+      CharacterProfile.presetMoriId,
+    );
+    await ProactiveMessageStore.instance.saveState(
+      CharacterProfile.presetMoriId,
+      state!.copyWith(
+        nextSilenceAtMs: now
+            .subtract(const Duration(minutes: 1))
+            .millisecondsSinceEpoch,
+      ),
+    );
+
+    final diagnostics = await service.diagnose();
+    expect(diagnostics.conversations.single.reason, '该角色刚触发过，冷却中');
+    expect(diagnostics.conversations.single.cooldownRemaining, isNotNull);
+
+    await service.runCheckForTest();
+
+    expect(calls, 1);
+    final history = await ChatHistoryStore.instance.loadFor(
+      CharacterProfile.presetMoriId,
+    );
+    expect(history, hasLength(2));
+  });
+
+  test('nudge trigger still respects the character cooldown', () async {
+    final now = DateTime.now();
+    var calls = 0;
+    final client = MockClient.streaming((_, _) async {
+      calls++;
+      const sse =
+          'data: {"choices":[{"delta":{"content":"晚上好。"}}]}\n'
+          'data: [DONE]\n';
+      return http.StreamedResponse(
+        Stream.value(utf8.encode(sse)),
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      );
+    });
+    final chatService = ChatService(client: client);
+    addTearDown(chatService.dispose);
+    final service = ProactiveMessageService.test(
+      chatService: chatService,
+      random: _AlwaysZeroRandom(),
+    );
+
+    await ProactiveMessageStore.instance.saveSettings(
+      const ProactiveMessageSettings(
+        enabled: true,
+        silenceEnabled: false,
+        scheduledEnabled: false,
+        nudgeEnabled: true,
+        quietHoursEnabled: false,
+      ),
+    );
+    await ChatHistoryStore.instance.saveFor(CharacterProfile.presetMoriId, [
+      ChatMessage(
+        id: 'user_nudge_cooldown',
+        role: ChatRole.user,
+        content: '我先去忙了。',
+        createdAt: now.subtract(const Duration(minutes: 30)),
+      ),
+      ChatMessage(
+        id: 'assistant_question_cooldown',
+        role: ChatRole.assistant,
+        content: '你今晚会早点睡吗？',
+        createdAt: now.subtract(const Duration(minutes: 20)),
+      ),
+    ]);
+    await ProactiveMessageStore.instance.saveState(
+      CharacterProfile.presetMoriId,
+      ProactiveMessageState(
+        lastActivityAtMs: now
+            .subtract(const Duration(minutes: 20))
+            .millisecondsSinceEpoch,
+        nextSilenceAtMs: now
+            .add(const Duration(hours: 2))
+            .millisecondsSinceEpoch,
+        lastUserMessageAtMs: now
+            .subtract(const Duration(minutes: 30))
+            .millisecondsSinceEpoch,
+        lastAssistantAtMs: now
+            .subtract(const Duration(minutes: 20))
+            .millisecondsSinceEpoch,
+        lastAssistantMessageId: 'assistant_question_cooldown',
+        lastAssistantText: '你今晚会早点睡吗？',
+        dailyDate: _dateKey(now),
+      ),
+    );
+
+    await service.triggerNow(CharacterProfile.presetMoriId);
+    expect(calls, 1);
+
+    await service.runCheckForTest();
+
+    expect(calls, 1);
+    final state = await ProactiveMessageStore.instance.loadState(
+      CharacterProfile.presetMoriId,
+    );
+    expect(state?.nudgedMessageId, isEmpty);
+  });
+
+  test('one character cooldown does not block another character', () async {
+    final now = DateTime.now();
+    final second = await CharacterStore.instance.addCard(
+      name: '小森',
+      persona: '安静、耐心。',
+    );
+    var calls = 0;
+    final client = MockClient.streaming((_, _) async {
+      calls++;
+      const sse =
+          'data: {"choices":[{"delta":{"content":"晚上好。"}}]}\n'
+          'data: [DONE]\n';
+      return http.StreamedResponse(
+        Stream.value(utf8.encode(sse)),
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      );
+    });
+    final chatService = ChatService(client: client);
+    addTearDown(chatService.dispose);
+    final service = ProactiveMessageService.test(
+      chatService: chatService,
+      random: _AlwaysZeroRandom(),
+    );
+
+    await ProactiveMessageStore.instance.saveSettings(
+      const ProactiveMessageSettings(
+        enabled: true,
+        silenceEnabled: true,
+        scheduledEnabled: false,
+        nudgeEnabled: false,
+        quietHoursEnabled: false,
+      ),
+    );
+    for (final card in [CharacterProfile.presetMori, second]) {
+      await ChatHistoryStore.instance.saveFor(card.id, [
+        ChatMessage(
+          id: 'user_${card.id}',
+          role: ChatRole.user,
+          content: '晚上好。',
+          createdAt: now.subtract(const Duration(hours: 2)),
+        ),
+      ]);
+    }
+    await ProactiveMessageStore.instance.saveState(
+      CharacterProfile.presetMoriId,
+      ProactiveMessageState(
+        nextSilenceAtMs: now
+            .add(const Duration(hours: 2))
+            .millisecondsSinceEpoch,
+        dailyDate: _dateKey(now),
+      ),
+    );
+    await ProactiveMessageStore.instance.saveState(
+      second.id,
+      ProactiveMessageState(
+        lastActivityAtMs: now
+            .subtract(const Duration(hours: 1))
+            .millisecondsSinceEpoch,
+        nextSilenceAtMs: now
+            .subtract(const Duration(minutes: 1))
+            .millisecondsSinceEpoch,
+        dailyDate: _dateKey(now),
+      ),
+    );
+
+    await service.triggerNow(CharacterProfile.presetMoriId);
+    expect(calls, 1);
+
+    final diagnostics = await service.diagnose();
+    final byName = {
+      for (final item in diagnostics.conversations) item.characterName: item,
+    };
+    expect(byName['Mori']?.reason, '该角色刚触发过，冷却中');
+    expect(byName['小森']?.reason, '条件已满足，可以触发');
+
+    await service.runCheckForTest();
+
+    expect(calls, 2);
+    expect(await ChatHistoryStore.instance.loadFor(second.id), hasLength(2));
+  });
+
+  test('per-character negative daily limit is stored as unlimited', () async {
+    final service = ProactiveMessageService.test(
+      chatService: ChatService(
+        client: MockClient.streaming((_, _) async {
+          fail('config update should not call the model');
+        }),
+      ),
+      random: _AlwaysZeroRandom(),
+    );
+
+    await service.updateConversationConfig(
+      CharacterProfile.presetMoriId,
+      dailyLimit: -3,
+    );
+
+    final state = await ProactiveMessageStore.instance.loadState(
+      CharacterProfile.presetMoriId,
+    );
+    expect(state?.dailyLimit, ProactiveMessageSettings.unlimited);
+  });
+
+  test('diagnostics explains why a character is skipped', () async {
+    final service = ProactiveMessageService.test(
+      chatService: ChatService(
+        client: MockClient.streaming((_, _) async {
+          return http.StreamedResponse(const Stream.empty(), 200);
+        }),
+      ),
+      random: _AlwaysZeroRandom(),
+    );
+
+    await ProactiveMessageStore.instance.saveSettings(
+      const ProactiveMessageSettings(
+        enabled: true,
+        silenceEnabled: false,
+        scheduledEnabled: false,
+      ),
+    );
+
+    final diagnostics = await service.diagnose();
+    expect(diagnostics.modelConfigured, isTrue);
+    expect(diagnostics.conversations.single.reason, '该角色还没有聊天记录');
   });
 }
 

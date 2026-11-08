@@ -47,28 +47,48 @@ void main() {
   test('normalizes invalid ranges and scheduled times', () async {
     final settings = const ProactiveMessageSettings(
       silenceMinMinutes: 500,
-      silenceMaxMinutes: 10,
+      silenceMaxMinutes: 1200,
       dailyLimit: 99,
-      maxUnanswered: 0,
+      maxUnanswered: 42,
       quietStartMinutes: -10,
       quietEndMinutes: 2000,
       scheduledTimes: ['25:00', '08:30', '08:30', 'bad', '7:05'],
     ).normalized();
 
-    expect(
-      settings.silenceMinMinutes,
-      ProactiveMessageSettings.maxSilenceMinutes -
-          ProactiveMessageSettings.minSilenceMinutes,
-    );
-    expect(
-      settings.silenceMaxMinutes,
-      ProactiveMessageSettings.maxSilenceMinutes,
-    );
-    expect(settings.dailyLimit, ProactiveMessageSettings.maxDailyLimit);
-    expect(settings.maxUnanswered, 1);
+    expect(settings.silenceMinMinutes, 500);
+    expect(settings.silenceMaxMinutes, 1200);
+    expect(settings.dailyLimit, 99);
+    expect(settings.maxUnanswered, 42);
     expect(settings.quietStartMinutes, 0);
     expect(settings.quietEndMinutes, 24 * 60 - 1);
     expect(settings.scheduledTimes, ['07:05', '08:30']);
+  });
+
+  test('keeps silence minimum at one minute and orders the range', () {
+    final settings = const ProactiveMessageSettings(
+      silenceMinMinutes: 0,
+      silenceMaxMinutes: -5,
+    ).normalized();
+
+    expect(settings.silenceMinMinutes, 1);
+    expect(settings.silenceMaxMinutes, 1);
+  });
+
+  test('keeps negative limits as unlimited', () {
+    final settings = const ProactiveMessageSettings(
+      dailyLimit: -3,
+      maxUnanswered: -2,
+    ).normalized();
+
+    expect(settings.dailyLimit, ProactiveMessageSettings.unlimited);
+    expect(settings.maxUnanswered, ProactiveMessageSettings.unlimited);
+
+    const state = ProactiveMessageState(
+      dailyLimit: -5,
+      firedSlots: ['not-a-slot'],
+    );
+    expect(state.normalized().dailyLimit, -1);
+    expect(state.normalized().firedSlots, isEmpty);
   });
 
   test('detects quiet hours across midnight', () {
@@ -98,7 +118,7 @@ void main() {
       unansweredCount: 2,
       dailyDate: '2026-11-08',
       dailyCount: 3,
-      firedSlots: ['2026-11-08|08:30'],
+      firedSlots: ['2026-11-08|08:30', '2026-11-08|Closure: broken slot'],
     );
     await ProactiveMessageStore.instance.saveState('mori', state);
 

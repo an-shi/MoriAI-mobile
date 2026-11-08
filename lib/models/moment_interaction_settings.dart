@@ -6,17 +6,23 @@ class MomentInteractionSettings {
 
   static const defaults = MomentInteractionSettings();
 
-  static const maxCommentCount = 5;
-  static const maxReplyDepth = 3;
+  static const unlimited = -1;
 
   final int autoCommentCount;
   final int autoReplyDepth;
 
   MomentInteractionSettings normalized() {
     return MomentInteractionSettings(
-      autoCommentCount: autoCommentCount.clamp(0, maxCommentCount).toInt(),
-      autoReplyDepth: autoReplyDepth.clamp(0, maxReplyDepth).toInt(),
+      autoCommentCount: _normalize(autoCommentCount),
+      autoReplyDepth: _normalize(autoReplyDepth),
     );
+  }
+
+  static int _normalize(int value) {
+    if (value < 0) {
+      return unlimited;
+    }
+    return value;
   }
 
   MomentInteractionSettings copyWith({
