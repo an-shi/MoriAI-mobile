@@ -11,6 +11,7 @@ import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
+import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
 import 'package:mori_ai/utils/chat_text_utils.dart';
 
@@ -89,6 +90,7 @@ class MomentService implements MomentGenerator {
               })
               .join('\n');
     final angle = _momentAngles[_random.nextInt(_momentAngles.length)];
+    final moodContext = MoodStore.instance.contextLine(character.id);
     final systemPrompt =
         '''
 ${MoriConfig.buildSystemPrompt(character)}
@@ -98,7 +100,7 @@ ${MoriConfig.buildSystemPrompt(character)}
 本次创作方向：$angle
 最近发布过的动态（不要重复这些内容、开头、主题和句式）：
 $recentSummary
-
+${moodContext.isEmpty ? '' : '\n$moodContext\n'}
 要求：
 - 使用第一人称，符合角色的性格和说话方式。
 - 1-3 句话，简短自然，适合直接展示在动态列表。
@@ -127,6 +129,7 @@ $recentSummary
     final existingComments = _formatExistingComments(moment, character);
     final activityContext = CharacterActivityContextBuilder.instance
         .buildForMoment(character.id);
+    final moodContext = MoodStore.instance.contextLine(character.id);
 
     final systemPrompt =
         '''
@@ -138,6 +141,7 @@ ${MoriConfig.buildSystemPrompt(character)}
 $imageHint已有评论（标记为「你自己」的是你之前发表的内容）：
 $existingComments
 ${activityContext.isEmpty ? '' : '\n$activityContext\n'}
+${moodContext.isEmpty ? '' : '\n$moodContext\n'}
 身份规则：
 - 你是「${character.displayName}」。
 - 标记为「你自己」的评论是你之前写的。
@@ -173,6 +177,7 @@ ${activityContext.isEmpty ? '' : '\n$activityContext\n'}
     final existingComments = _formatExistingComments(moment, character);
     final activityContext = CharacterActivityContextBuilder.instance
         .buildForMoment(character.id);
+    final moodContext = MoodStore.instance.contextLine(character.id);
 
     final systemPrompt =
         '''
@@ -188,6 +193,7 @@ $replyAuthor：${replyTo.content}
 已有评论（标记为「你自己」的是你之前发表的内容）：
 $existingComments
 ${activityContext.isEmpty ? '' : '\n$activityContext\n'}
+${moodContext.isEmpty ? '' : '\n$moodContext\n'}
 身份规则：
 - 标记为「你自己」的评论是你之前写的。
 - 其他名称的评论来自用户或其他角色，不要当成你自己的发言。
