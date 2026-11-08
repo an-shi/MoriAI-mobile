@@ -4,7 +4,9 @@ import 'package:mori_ai/models/model_settings.dart';
 import 'package:mori_ai/pages/settings/about_settings_page.dart';
 import 'package:mori_ai/pages/settings/appearance_settings_page.dart';
 import 'package:mori_ai/pages/settings/model_settings_page.dart';
+import 'package:mori_ai/pages/settings/moment_interaction_settings_page.dart';
 import 'package:mori_ai/services/model_store.dart';
+import 'package:mori_ai/services/moment_interaction_settings_store.dart';
 import 'package:mori_ai/services/theme_store.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -12,85 +14,102 @@ class SettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([
-        ModelStore.instance.selection,
-        ModelStore.instance.activePresetId,
-        ModelStore.instance.presets,
-        ThemeStore.instance.themeMode,
-      ]),
-      builder: (context, _) {
-        final theme = Theme.of(context);
-        final colors = theme.colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('设置')),
+      body: AnimatedBuilder(
+        animation: Listenable.merge([
+          ModelStore.instance.selection,
+          ModelStore.instance.activePresetId,
+          ModelStore.instance.presets,
+          ThemeStore.instance.themeMode,
+          MomentInteractionSettingsStore.instance.settings,
+        ]),
+        builder: (context, _) {
+          final theme = Theme.of(context);
+          final colors = theme.colorScheme;
 
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            Text(
-              '偏好设置',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _SettingsMenuCard(
-              children: [
-                _SettingsMenuTile(
-                  icon: Icons.memory_rounded,
-                  title: '模型',
-                  subtitle: _modelSummary(),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const ModelSettingsPage(),
-                      ),
-                    );
-                  },
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            children: [
+              Text(
+                '偏好设置',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: colors.onSurfaceVariant,
                 ),
-                const _SettingsMenuDivider(),
-                _SettingsMenuTile(
-                  icon: Icons.palette_outlined,
-                  title: '外观',
-                  subtitle: _themeModeLabel(
-                    ThemeStore.instance.themeMode.value,
+              ),
+              const SizedBox(height: 8),
+              _SettingsMenuCard(
+                children: [
+                  _SettingsMenuTile(
+                    icon: Icons.memory_rounded,
+                    title: '模型',
+                    subtitle: _modelSummary(),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const ModelSettingsPage(),
+                        ),
+                      );
+                    },
                   ),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const AppearanceSettingsPage(),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '其他',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: colors.onSurfaceVariant,
+                  const _SettingsMenuDivider(),
+                  _SettingsMenuTile(
+                    icon: Icons.palette_outlined,
+                    title: '外观',
+                    subtitle: _themeModeLabel(
+                      ThemeStore.instance.themeMode.value,
+                    ),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AppearanceSettingsPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  const _SettingsMenuDivider(),
+                  _SettingsMenuTile(
+                    icon: Icons.auto_awesome_outlined,
+                    title: '动态互动',
+                    subtitle: _momentInteractionSummary(),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const MomentInteractionSettingsPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 8),
-            _SettingsMenuCard(
-              children: [
-                _SettingsMenuTile(
-                  icon: Icons.info_outline_rounded,
-                  title: '关于 Mori',
-                  subtitle: '版本 1.0.0',
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const AboutSettingsPage(),
-                      ),
-                    );
-                  },
+              const SizedBox(height: 16),
+              Text(
+                '其他',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: colors.onSurfaceVariant,
                 ),
-              ],
-            ),
-          ],
-        );
-      },
+              ),
+              const SizedBox(height: 8),
+              _SettingsMenuCard(
+                children: [
+                  _SettingsMenuTile(
+                    icon: Icons.info_outline_rounded,
+                    title: '关于 Mori',
+                    subtitle: '版本 1.0.0',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AboutSettingsPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -125,6 +144,17 @@ class SettingsPage extends StatelessWidget {
       ThemeMode.light => '浅色模式',
       ThemeMode.dark => '深色模式',
     };
+  }
+
+  String _momentInteractionSummary() {
+    final settings = MomentInteractionSettingsStore.instance.settings.value;
+    final comments = settings.autoCommentCount <= 0
+        ? '评论关闭'
+        : '评论 ${settings.autoCommentCount} 人';
+    final replies = settings.autoReplyDepth <= 0
+        ? '回复关闭'
+        : '回复 ${settings.autoReplyDepth} 层';
+    return '$comments · $replies';
   }
 }
 

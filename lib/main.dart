@@ -6,6 +6,9 @@ import 'package:mori_ai/services/avatar_store.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/group_store.dart';
 import 'package:mori_ai/services/model_store.dart';
+import 'package:mori_ai/services/moment_interaction_settings_store.dart';
+import 'package:mori_ai/services/moment_store.dart';
+import 'package:mori_ai/services/pinned_conversation_store.dart';
 import 'package:mori_ai/services/theme_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
 
@@ -17,6 +20,9 @@ Future<void> main() async {
     CharacterStore.instance.load(),
     GroupStore.instance.load(),
     UserProfileStore.instance.load(),
+    PinnedConversationStore.instance.load(),
+    MomentStore.instance.load(),
+    MomentInteractionSettingsStore.instance.load(),
     AvatarStore.instance.load(),
     ThemeStore.instance.load(),
   ]);

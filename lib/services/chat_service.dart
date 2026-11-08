@@ -26,6 +26,7 @@ class ChatService {
     required String apiKey,
     required String model,
     required String systemPrompt,
+    double? temperature,
   }) async* {
     final key = apiKey.trim();
     if (key.isEmpty) {
@@ -52,6 +53,7 @@ class ChatService {
           ...messages.map((message) => message.toApiJson()),
         ],
         'stream': true,
+        'temperature': ?temperature,
         if (provider.supportsThinkingToggle)
           // 关闭深度思考，缩短首字延迟，适合日常陪伴聊天。
           'thinking': {'type': 'disabled'},
