@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/moment.dart';
 import 'package:mori_ai/models/moment_interaction_settings.dart';
+import 'package:mori_ai/services/character_activity_recorder.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/moment_generator.dart';
 import 'package:mori_ai/services/moment_interaction_settings_store.dart';
@@ -305,6 +307,14 @@ class MomentInteractionService implements MomentInteractions {
         isUser: false,
         content: content,
       );
+      unawaited(
+        CharacterActivityRecorder.recordMomentComment(
+          character: character,
+          moment: moment,
+          comment: comment,
+          isReply: false,
+        ),
+      );
       return comment;
     } catch (_) {
       return null;
@@ -337,6 +347,14 @@ class MomentInteractionService implements MomentInteractions {
             ? (replyTo.isUser ? '用户' : '角色')
             : replyTo.authorName,
         replyDepth: replyTo.replyDepth + 1,
+      );
+      unawaited(
+        CharacterActivityRecorder.recordMomentComment(
+          character: character,
+          moment: latest,
+          comment: comment,
+          isReply: true,
+        ),
       );
       return comment;
     } catch (_) {

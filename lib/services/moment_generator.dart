@@ -6,6 +6,7 @@ import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/chat_message.dart';
 import 'package:mori_ai/models/moment.dart';
 import 'package:mori_ai/services/api_key_store.dart';
+import 'package:mori_ai/services/character_activity_context_builder.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/model_store.dart';
@@ -124,6 +125,8 @@ $recentSummary
     final content = moment.content.isEmpty ? '（图片动态）' : moment.content;
     final imageHint = moment.image != null ? '这条动态包含一张图片。\n' : '';
     final existingComments = _formatExistingComments(moment, character);
+    final activityContext = CharacterActivityContextBuilder.instance
+        .buildForMoment(character.id);
 
     final systemPrompt =
         '''
@@ -134,7 +137,7 @@ ${MoriConfig.buildSystemPrompt(character)}
 动态内容：$content
 $imageHint已有评论（标记为「你自己」的是你之前发表的内容）：
 $existingComments
-
+${activityContext.isEmpty ? '' : '\n$activityContext\n'}
 身份规则：
 - 你是「${character.displayName}」。
 - 标记为「你自己」的评论是你之前写的。
@@ -168,6 +171,8 @@ $existingComments
     final imageHint = moment.image != null ? '这条动态包含一张图片。\n' : '';
     final replyAuthor = _commentAuthorName(moment, replyTo);
     final existingComments = _formatExistingComments(moment, character);
+    final activityContext = CharacterActivityContextBuilder.instance
+        .buildForMoment(character.id);
 
     final systemPrompt =
         '''
@@ -182,7 +187,7 @@ $replyAuthor：${replyTo.content}
 
 已有评论（标记为「你自己」的是你之前发表的内容）：
 $existingComments
-
+${activityContext.isEmpty ? '' : '\n$activityContext\n'}
 身份规则：
 - 标记为「你自己」的评论是你之前写的。
 - 其他名称的评论来自用户或其他角色，不要当成你自己的发言。

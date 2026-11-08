@@ -9,6 +9,8 @@ import 'package:mori_ai/models/chat_message.dart';
 import 'package:mori_ai/models/proactive_message_settings.dart';
 import 'package:mori_ai/models/proactive_message_state.dart';
 import 'package:mori_ai/services/api_key_store.dart';
+import 'package:mori_ai/services/character_activity_context_builder.dart';
+import 'package:mori_ai/services/character_activity_recorder.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
@@ -695,6 +697,12 @@ class ProactiveMessageService with WidgetsBindingObserver {
         ...bubbles,
       ]);
       ChatHistoryStore.instance.notifyExternalMessages(conversationId, bubbles);
+      unawaited(
+        CharacterActivityRecorder.recordProactiveMessages(
+          character: character,
+          messages: bubbles,
+        ),
+      );
 
       final next = startedAt.add(_randomSilence());
       final countTowardsQuota = !manual && !nudge;
@@ -764,9 +772,12 @@ class ProactiveMessageService with WidgetsBindingObserver {
         ? history.sublist(history.length - _maxHistoryMessages)
         : history;
     final buffer = StringBuffer();
+    final activityContext = CharacterActivityContextBuilder.instance
+        .buildForProactive(character.id);
     final systemPrompt =
         '${MoriConfig.buildSystemPrompt(character)}\n\n'
-        '$_proactiveSystemInstruction';
+        '$_proactiveSystemInstruction'
+        '${activityContext.isEmpty ? '' : '\n\n$activityContext'}';
     try {
       await for (final chunk in _chatService.streamChat(
         [...recent, ChatMessage(role: ChatRole.user, content: trigger)],

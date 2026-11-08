@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/moment.dart';
 import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/services/character_activity_recorder.dart';
 import 'package:mori_ai/services/moment_generator.dart';
 import 'package:mori_ai/services/moment_interaction_service.dart';
 import 'package:mori_ai/services/moment_store.dart';
@@ -169,6 +170,12 @@ class _MomentsPageState extends State<MomentsPage> {
         authorName: character.displayName,
         isUser: false,
         content: content,
+      );
+      unawaited(
+        CharacterActivityRecorder.recordMoment(
+          character: character,
+          moment: moment,
+        ),
       );
       unawaited(_interactions.onMomentCreated(moment));
       if (!mounted) {
