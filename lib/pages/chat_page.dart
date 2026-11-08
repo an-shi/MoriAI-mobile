@@ -5,16 +5,22 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mori_ai/config/model_providers.dart';
 import 'package:mori_ai/config/mori_config.dart';
 import 'package:mori_ai/models/character_profile.dart';
+import 'package:mori_ai/models/chat_burst_settings.dart';
 import 'package:mori_ai/models/chat_message.dart';
 import 'package:mori_ai/models/group_profile.dart';
 import 'package:mori_ai/services/api_key_store.dart';
+import 'package:mori_ai/services/character_activity_context_builder.dart';
+import 'package:mori_ai/services/character_activity_recorder.dart';
 import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/services/chat_burst_settings_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_queue_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/model_store.dart';
+import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
+import 'package:mori_ai/utils/chat_bubble_utils.dart';
 import 'package:mori_ai/utils/chat_queue_utils.dart';
 import 'package:mori_ai/utils/chat_text_utils.dart';
 import 'package:mori_ai/utils/group_chat_utils.dart';
@@ -22,10 +28,11 @@ import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/user_avatar.dart';
 
 class ChatPage extends StatefulWidget {
-  const ChatPage({super.key, this.group, this.characterId});
+  const ChatPage({super.key, this.group, this.characterId, this.chatService});
 
   final GroupProfile? group;
   final String? characterId;
+  final ChatService? chatService;
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -39,10 +46,33 @@ class _ChatPageState extends State<ChatPage> {
     'image/webp',
   };
 
+  static String _naturalBurstInstruction(ChatBurstRange range) =>
+      '''
+【连续消息】
+你是在用手机打字聊天，不是在写文章。
+一次只说一两句话，最多两三句；想说的多就拆成几条短消息发，用 ||| 分隔。
+想连发时，拆成 ${range.minMessages}-${range.maxMessages} 条，每条约 ${range.minChars}-${range.maxChars} 字。
+当用户要求你“多发几条”“连发”“分几条”“一条条说”时，必须用 ||| 分隔，至少 2 条，不要把内容合并成一段。
+示例：
+用户：今天好累
+你：那先别硬撑啦|||去躺一会儿|||我给你讲个小事
+最多 ${range.maxMessages} 条。只有一句话就能说清楚时才只发一条；不要一次输出一大段，也不要在正文里解释这个格式。''';
+
+  static String _activeBurstInstruction(ChatBurstRange range) =>
+      '''
+【连发倾向：积极】
+你很喜欢像真人一样连续发几条短消息。
+默认拆成 ${range.minMessages}-${range.maxMessages} 条，每条内容适中，字数约 ${range.minChars}-${range.maxChars} 字，用 ||| 分隔。
+除非确实只有一句话要说，否则不要合并成一段。
+示例：
+用户：今天好累
+你：那先别硬撑啦|||去躺一会儿|||我给你讲个小事
+最多 ${range.maxMessages} 条。不要解释这个格式。''';
+
   final _messages = <ChatMessage>[];
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
-  final _service = ChatService();
+  late final ChatService _service;
   final _imagePicker = ImagePicker();
 
   bool _isSending = false;
@@ -80,6 +110,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
+    _service = widget.chatService ?? ChatService();
     _inputController.addListener(_handleInputChanged);
     ModelStore.instance.selection.addListener(_handleModelConfigChanged);
     ModelStore.instance.modelCatalog.addListener(_handleModelConfigChanged);
@@ -508,7 +539,7 @@ AI 群成员有：$memberNames。
 直接输出回复正文，不要在正文开头添加任何人的名字或角色名前缀，界面会自动显示发送者名称。''';
   }
 
-  Future<ChatMessage?> _streamReply({
+  Future<List<ChatMessage>> _streamReply({
     required CharacterProfile responder,
     required String conversationId,
     required ModelProvider provider,
@@ -517,10 +548,68 @@ AI 群成员有：$memberNames。
     required String systemPrompt,
     required bool showSender,
     required List<ChatMessage> roundHistory,
+    bool forceBurst = false,
+    int burstTarget = 0,
+    bool continuation = false,
+    int alreadySent = 0,
+    bool quiet = false,
   }) async {
     final history = showSender
         ? buildGroupRequestHistory(roundHistory, responderId: responder.id)
         : List<ChatMessage>.of(roundHistory);
+    final activityContext = showSender
+        ? CharacterActivityContextBuilder.instance.buildForGroupChat(
+            responder.id,
+          )
+        : CharacterActivityContextBuilder.instance.buildForPrivateChat(
+            responder.id,
+          );
+    final moodContext = MoodStore.instance.contextLine(responder.id);
+    final systemPromptWithContext = [
+      systemPrompt,
+      if (activityContext.isNotEmpty) activityContext,
+      if (moodContext.isNotEmpty) moodContext,
+    ].join('\n\n');
+    final burstSettings = ChatBurstSettingsStore.instance.settings.value;
+    final tendency = burstSettings.tendencyFor(responder.id);
+    final range = burstSettings.rangeFor(
+      tendency == ChatBurstTendency.off && forceBurst
+          ? ChatBurstTendency.active
+          : tendency,
+    );
+    final tendencyInstruction = switch (tendency) {
+      ChatBurstTendency.active => _activeBurstInstruction(range),
+      ChatBurstTendency.natural => _naturalBurstInstruction(range),
+      ChatBurstTendency.off || ChatBurstTendency.followGlobal => '',
+    };
+    final baseSystemPrompt = tendencyInstruction.isEmpty
+        ? systemPromptWithContext
+        : '$systemPromptWithContext\n\n$tendencyInstruction';
+    final allowAutoSplit = forceBurst || tendency != ChatBurstTendency.off;
+    final maxBubbles = forceBurst && burstTarget > 0
+        ? burstTarget
+        : range.maxMessages;
+    final jsonBurst = forceBurst && burstTarget >= 2 && !continuation;
+    final effectiveSystemPrompt = continuation
+        ? '$baseSystemPrompt\n\n'
+              '【续发要求】\n'
+              '你已经连续发了 $alreadySent 条，还差 $burstTarget 条。\n'
+              '请继续输出 $burstTarget 条简短自然的消息，每条约 ${range.minChars}-${range.maxChars} 字，用 ||| 分隔；不要重复前面已经发过的内容，不要解释，不要提及系统要求。'
+        : jsonBurst
+        ? '$baseSystemPrompt\n\n'
+              '【本轮连发要求】\n'
+              '用户明确要求连续发送 $burstTarget 条消息。请只输出一个 JSON 字符串数组，数组必须包含 $burstTarget 个元素，每个元素是一条自然的消息，每条约 ${range.minChars}-${range.maxChars} 字。\n'
+              '示例：["第一条","第二条","第三条"]\n'
+              '不要输出 Markdown 代码块，不要输出数组以外的任何文字，不要解释。\n'
+              '这是系统格式要求，优先于角色平时的单条回复习惯。'
+        : forceBurst
+        ? '$baseSystemPrompt\n\n'
+              '【本轮连发要求】\n'
+              '用户明确要求连续发送多条消息。请严格输出 $burstTarget 条短消息，每条约 ${range.minChars}-${range.maxChars} 字，用 ||| 分隔。\n'
+              '不要只输出一条，不要合并成一段，不要解释格式，也不要提及系统要求。\n'
+              '这是系统格式要求，优先于角色平时的单条回复习惯。'
+        : baseSystemPrompt;
+    final moodDelay = MoodStore.instance.delayFactor(responder.id);
     final assistantMessage = ChatMessage(
       id: _newMessageId(),
       role: ChatRole.assistant,
@@ -536,16 +625,163 @@ AI 群成员有：$memberNames。
     final assistantId = assistantMessage.id;
     final buffer = StringBuffer();
     final prefix = showSender ? '${responder.displayName}：' : '';
+    final bubbleIds = <String>[assistantId];
+    var burstMode = false;
 
-    int indexOfAssistant() {
-      return _messages.indexWhere((message) => message.id == assistantId);
+    void recordActivities(List<ChatMessage> bubbles) {
+      if (bubbles.isEmpty) {
+        return;
+      }
+      unawaited(
+        CharacterActivityRecorder.recordChatMessages(
+          character: responder,
+          conversationId: conversationId,
+          isGroup: showSender,
+          messages: bubbles,
+        ),
+      );
     }
 
-    String visibleContent() {
+    int indexOfMessage(String id) {
+      return _messages.indexWhere((message) => message.id == id);
+    }
+
+    int indexOfAssistant() => indexOfMessage(assistantId);
+
+    String rawContent() {
       final raw = buffer.toString();
       return showSender
           ? stripLeadingSpeakerName(raw, responder.displayName)
           : raw;
+    }
+
+    String normalizePart(String raw) {
+      return stripLeadingSpeakerName(raw, responder.displayName).trim();
+    }
+
+    void updateBubble(String id, String content) {
+      final index = indexOfMessage(id);
+      if (index < 0) {
+        return;
+      }
+      setState(() {
+        _messages[index] = _messages[index].copyWith(content: content);
+      });
+    }
+
+    void addBubble(String content) {
+      final anchorIndex = indexOfMessage(bubbleIds.last);
+      if (anchorIndex < 0) {
+        return;
+      }
+      final bubble = assistantMessage.copyWith(
+        id: _newMessageId(),
+        content: content,
+        createdAt: DateTime.now(),
+      );
+      setState(() => _messages.insert(anchorIndex + 1, bubble));
+      bubbleIds.add(bubble.id);
+    }
+
+    void removeBubble(String id) {
+      final index = indexOfMessage(id);
+      if (index >= 0) {
+        setState(() => _messages.removeAt(index));
+      }
+      bubbleIds.remove(id);
+    }
+
+    String contentOf(String id) {
+      final index = indexOfMessage(id);
+      return index >= 0 ? _messages[index].content.trim() : '';
+    }
+
+    void renderBurst() {
+      final segments = splitChatStreamSegments(rawContent());
+      for (var index = 0; index < segments.length; index++) {
+        final content = flattenChatBubbleText(normalizePart(segments[index]));
+        if (index < bubbleIds.length) {
+          updateBubble(bubbleIds[index], content);
+        } else {
+          addBubble(content);
+        }
+      }
+    }
+
+    List<ChatMessage> finalizeBurst() {
+      renderBurst();
+      final emptyIds = [
+        for (final id in bubbleIds)
+          if (contentOf(id).isEmpty) id,
+      ];
+      if (emptyIds.isNotEmpty) {
+        setState(
+          () =>
+              _messages.removeWhere((message) => emptyIds.contains(message.id)),
+        );
+        bubbleIds.removeWhere(emptyIds.contains);
+      }
+      if (bubbleIds.length > defaultMaxChatBubbles) {
+        final keep = bubbleIds
+            .take(defaultMaxChatBubbles)
+            .toList(growable: true);
+        final tailIds = bubbleIds
+            .skip(defaultMaxChatBubbles)
+            .toList(growable: false);
+        final tailText = [
+          for (final id in tailIds)
+            if (contentOf(id).isNotEmpty) contentOf(id),
+        ].join('\n');
+        final lastIndex = indexOfMessage(keep.last);
+        if (lastIndex >= 0 && tailText.isNotEmpty) {
+          final headText = _messages[lastIndex].content.trim();
+          setState(() {
+            _messages[lastIndex] = _messages[lastIndex].copyWith(
+              content: flattenChatBubbleText(
+                headText.isEmpty ? tailText : '$headText\n$tailText',
+              ),
+            );
+          });
+        }
+        setState(
+          () =>
+              _messages.removeWhere((message) => tailIds.contains(message.id)),
+        );
+        bubbleIds
+          ..clear()
+          ..addAll(keep);
+      }
+      for (final id in bubbleIds) {
+        final index = indexOfMessage(id);
+        if (index < 0) {
+          continue;
+        }
+        final flattened = flattenChatBubbleText(_messages[index].content);
+        if (flattened != _messages[index].content) {
+          setState(() {
+            _messages[index] = _messages[index].copyWith(content: flattened);
+          });
+        }
+      }
+      return List<ChatMessage>.unmodifiable([
+        for (final id in bubbleIds)
+          if (indexOfMessage(id) >= 0) _messages[indexOfMessage(id)],
+      ]);
+    }
+
+    void keepPartialOnError() {
+      final partial = rawContent().trim();
+      if (partial.isEmpty) {
+        for (final id in List<String>.of(bubbleIds)) {
+          removeBubble(id);
+        }
+        return;
+      }
+      if (burstMode) {
+        finalizeBurst();
+      } else {
+        updateBubble(assistantId, partial);
+      }
     }
 
     final stopCompleter = Completer<void>();
@@ -556,7 +792,7 @@ AI 群成员有：$memberNames。
         provider: provider,
         apiKey: apiKey,
         model: model,
-        systemPrompt: systemPrompt,
+        systemPrompt: effectiveSystemPrompt,
       ),
     );
 
@@ -568,7 +804,7 @@ AI 群成员有：$memberNames。
           stopCompleter.future.then((_) => false),
         ]);
         if (!mounted) {
-          return null;
+          return const <ChatMessage>[];
         }
         if (!hasNext) {
           stopped = stopCompleter.isCompleted;
@@ -577,81 +813,165 @@ AI 群成员有：$memberNames。
 
         final chunk = iterator.current;
         buffer.write(chunk);
-        final index = indexOfAssistant();
-        if (index < 0) {
-          return null;
+        if (!jsonBurst &&
+            !burstMode &&
+            containsChatBubbleDelimiter(buffer.toString())) {
+          burstMode = true;
         }
-        setState(() {
-          _messages[index] = _messages[index].copyWith(
-            content: visibleContent(),
-          );
-        });
-        _scrollToLatest();
+        if (burstMode) {
+          renderBurst();
+          _scrollToLatest();
+        }
       }
 
       if (stopped) {
-        final index = indexOfAssistant();
-        if (index >= 0 && _messages[index].content.trim().isEmpty) {
-          setState(() => _messages.removeAt(index));
+        final partial = rawContent().trim();
+        if (partial.isEmpty) {
+          removeBubble(assistantId);
+          return const <ChatMessage>[];
         }
-        return null;
+        if (burstMode) {
+          final bubbles = finalizeBurst();
+          recordActivities(bubbles);
+          return bubbles;
+        }
+        updateBubble(assistantId, partial);
+        final index = indexOfAssistant();
+        if (index < 0) {
+          return const <ChatMessage>[];
+        }
+        final bubbles = [_messages[index]];
+        recordActivities(bubbles);
+        return List<ChatMessage>.unmodifiable(bubbles);
       }
 
       if (!mounted) {
-        return null;
+        return const <ChatMessage>[];
       }
-      final finalContent = visibleContent();
-      if (finalContent.trim().isEmpty) {
-        final index = indexOfAssistant();
-        if (index >= 0) {
-          setState(() => _messages.removeAt(index));
+
+      if (burstMode) {
+        final bubbles = finalizeBurst();
+        if (bubbles.isEmpty) {
+          if (!quiet) {
+            _showSnackBar('$prefix没有返回内容，请再试一次。');
+          }
+          return const <ChatMessage>[];
         }
-        _showSnackBar('$prefix没有返回内容，请再试一次。');
-        return null;
+        final lastBubble = bubbles.last;
+        recordActivities(bubbles);
+        unawaited(
+          ProactiveMessageService.instance.noteAssistantMessage(
+            conversationId,
+            messageId: lastBubble.id,
+            text: lastBubble.content,
+          ),
+        );
+        return bubbles;
+      }
+
+      final finalContent = rawContent().trim();
+      if (finalContent.trim().isEmpty) {
+        removeBubble(assistantId);
+        if (!quiet) {
+          _showSnackBar('$prefix没有返回内容，请再试一次。');
+        }
+        return const <ChatMessage>[];
       }
       final index = indexOfAssistant();
       if (index < 0) {
-        return null;
+        return const <ChatMessage>[];
       }
+      final parsedBubbles = jsonBurst || continuation
+          ? parseJsonChatBubbles(finalContent, maxBubbles: maxBubbles)
+          : null;
+      final fallbackParts = allowAutoSplit
+          ? splitChatReply(
+              finalContent,
+              maxBubbles: maxBubbles,
+              forceSplit: forceBurst,
+            )
+          : splitExplicitChatBubbles(finalContent, maxBubbles: maxBubbles);
+      var parts = (parsedBubbles ?? fallbackParts)
+          .map(
+            (part) => flattenChatBubbleText(
+              stripLeadingSpeakerName(part, responder.displayName).trim(),
+            ),
+          )
+          .where((part) => part.isNotEmpty)
+          .toList(growable: false);
+      if (maxBubbles > 0) {
+        parts = capChatBubbleCount(parts, maxBubbles);
+      }
+      if (parts.isEmpty) {
+        removeBubble(assistantId);
+        if (!quiet) {
+          _showSnackBar('$prefix没有返回内容，请再试一次。');
+        }
+        return const <ChatMessage>[];
+      }
+
       setState(() {
-        _messages[index] = _messages[index].copyWith(content: finalContent);
+        _messages[index] = _messages[index].copyWith(content: parts.first);
       });
+      final bubbles = <ChatMessage>[_messages[index]];
+      for (var partIndex = 1; partIndex < parts.length; partIndex++) {
+        if (!mounted || _stopRequested) {
+          break;
+        }
+        await Future<void>.delayed(
+          Duration(
+            milliseconds:
+                (chatBubbleDelay(parts[partIndex]).inMilliseconds * moodDelay)
+                    .round(),
+          ),
+        );
+        if (!mounted || _stopRequested) {
+          break;
+        }
+        final anchorIndex = _messages.indexWhere(
+          (message) => message.id == bubbles.last.id,
+        );
+        if (anchorIndex < 0) {
+          break;
+        }
+        final bubble = assistantMessage.copyWith(
+          id: _newMessageId(),
+          content: parts[partIndex],
+          createdAt: DateTime.now(),
+        );
+        setState(() => _messages.insert(anchorIndex + 1, bubble));
+        bubbles.add(bubble);
+        _scrollToLatest(animate: true);
+      }
+
+      final lastBubble = bubbles.last;
+      recordActivities(bubbles);
       unawaited(
         ProactiveMessageService.instance.noteAssistantMessage(
           conversationId,
-          messageId: _messages[index].id,
-          text: finalContent,
+          messageId: lastBubble.id,
+          text: lastBubble.content,
         ),
       );
-      return _messages[index];
+      return List<ChatMessage>.unmodifiable(bubbles);
     } on ChatServiceException catch (error) {
       if (!mounted) {
-        return null;
+        return const <ChatMessage>[];
       }
-      setState(() {
-        if (visibleContent().trim().isEmpty) {
-          final index = indexOfAssistant();
-          if (index >= 0) {
-            _messages.removeAt(index);
-          }
-        }
-      });
-      _showSnackBar('$prefix${error.message}');
-      return null;
+      keepPartialOnError();
+      if (!quiet) {
+        _showSnackBar('$prefix${error.message}');
+      }
+      return const <ChatMessage>[];
     } catch (_) {
       if (!mounted) {
-        return null;
+        return const <ChatMessage>[];
       }
-      setState(() {
-        if (visibleContent().trim().isEmpty) {
-          final index = indexOfAssistant();
-          if (index >= 0) {
-            _messages.removeAt(index);
-          }
-        }
-      });
-      _showSnackBar('$prefix发送失败，请稍后重试。');
-      return null;
+      keepPartialOnError();
+      if (!quiet) {
+        _showSnackBar('$prefix发送失败，请稍后重试。');
+      }
+      return const <ChatMessage>[];
     } finally {
       try {
         await iterator.cancel();
@@ -807,6 +1127,123 @@ AI 群成员有：$memberNames。
     return roundHistoryFor(_messages, _queuedUserMessages, activeMessage);
   }
 
+  bool _wantsBurstReply(String text) {
+    return RegExp(
+      r'(多发|多来|多回|多聊|多几|连发|连续发|分条|分开发|分成几|拆开|多条|几条|一条条|一条一条|刷屏|([0-9]+|[一二两三四五六七八九十])\s*条|multiple messages|several messages)',
+      caseSensitive: false,
+    ).hasMatch(text);
+  }
+
+  int? _burstTarget(String text) {
+    if (!_wantsBurstReply(text)) {
+      return null;
+    }
+    if (RegExp(r'一条条|一条一条').hasMatch(text)) {
+      return 3;
+    }
+    final match = RegExp(r'([0-9]+|[一二两三四五六七八九十])\s*条').firstMatch(text);
+    if (match == null) {
+      return 3;
+    }
+    const chineseNumbers = {
+      '一': 1,
+      '二': 2,
+      '两': 2,
+      '三': 3,
+      '四': 4,
+      '五': 5,
+      '六': 6,
+      '七': 7,
+      '八': 8,
+      '九': 9,
+      '十': 10,
+    };
+    final value =
+        int.tryParse(match.group(1)!) ?? chineseNumbers[match.group(1)!] ?? 3;
+    if (value <= 1) {
+      return null;
+    }
+    return value;
+  }
+
+  ({int target, int minimum, bool force}) _resolveBurstTarget(
+    String characterId,
+    int requestedBurst,
+  ) {
+    final settings = ChatBurstSettingsStore.instance.settings.value;
+    final tendency = settings.tendencyFor(characterId);
+    final range = settings.rangeFor(
+      tendency == ChatBurstTendency.off && requestedBurst > 0
+          ? ChatBurstTendency.active
+          : tendency,
+    );
+    final force = requestedBurst > 0;
+    final target = force
+        ? requestedBurst.clamp(range.minMessages, range.maxMessages)
+        : 0;
+    final minimum = force
+        ? target
+        : (tendency == ChatBurstTendency.active ? range.minMessages : 0);
+    return (target: target, minimum: minimum, force: force);
+  }
+
+  Future<List<ChatMessage>> _generateBurstAwareReply({
+    required CharacterProfile character,
+    required String conversationId,
+    required ModelProvider provider,
+    required String apiKey,
+    required String model,
+    required String systemPrompt,
+    required bool showSender,
+    required List<ChatMessage> roundHistory,
+    required int requestedBurst,
+  }) async {
+    final burst = _resolveBurstTarget(character.id, requestedBurst);
+    var replies = await _streamReply(
+      responder: character,
+      conversationId: conversationId,
+      provider: provider,
+      apiKey: apiKey,
+      model: model,
+      systemPrompt: systemPrompt,
+      showSender: showSender,
+      roundHistory: roundHistory,
+      forceBurst: burst.force,
+      burstTarget: burst.target,
+    );
+
+    var attempts = 0;
+    while (burst.minimum > 0 &&
+        replies.isNotEmpty &&
+        replies.length < burst.minimum &&
+        attempts < 2 &&
+        mounted &&
+        !_stopRequested) {
+      final missing = burst.minimum - replies.length;
+      final extra = await _streamReply(
+        responder: character,
+        conversationId: conversationId,
+        provider: provider,
+        apiKey: apiKey,
+        model: model,
+        systemPrompt: systemPrompt,
+        showSender: showSender,
+        roundHistory: [...roundHistory, ...replies],
+        forceBurst: true,
+        burstTarget: missing,
+        continuation: true,
+        alreadySent: replies.length,
+        quiet: true,
+      );
+      if (extra.isEmpty) {
+        break;
+      }
+      replies = [...replies, ...extra];
+      attempts++;
+    }
+    return replies;
+  }
+
   Future<void> _runReplyRound(
     String conversationId,
     ChatMessage userMessage,
@@ -837,6 +1274,7 @@ AI 群成员有：$memberNames。
 
     final roundHistory = _roundHistory(userMessage);
     final model = selection.modelId;
+    final requestedBurst = _burstTarget(userMessage.content) ?? 0;
 
     if (_isGroup) {
       final speakers = selectGroupSpeakers(
@@ -848,8 +1286,14 @@ AI 群成员有：$memberNames。
         if (!mounted || _stopRequested) {
           break;
         }
-        final reply = await _streamReply(
-          responder: member,
+        await MoodStore.instance.observe(
+          member.id,
+          userMessage.content,
+          direct: false,
+          owner: true,
+        );
+        final replies = await _generateBurstAwareReply(
+          character: member,
           conversationId: conversationId,
           provider: provider,
           apiKey: apiKey,
@@ -857,11 +1301,12 @@ AI 群成员有：$memberNames。
           systemPrompt: _buildGroupSystemPrompt(member, members),
           showSender: true,
           roundHistory: roundHistory,
+          requestedBurst: requestedBurst,
         );
-        if (reply == null) {
+        if (replies.isEmpty) {
           break;
         }
-        roundHistory.add(reply);
+        roundHistory.addAll(replies);
       }
     } else {
       final character = CharacterStore.instance.cardById(_conversationId);
@@ -869,8 +1314,14 @@ AI 群成员有：$memberNames。
         _showSnackBar('角色卡不存在或已被删除');
         return;
       }
-      await _streamReply(
-        responder: character,
+      await MoodStore.instance.observe(
+        character.id,
+        userMessage.content,
+        direct: true,
+        owner: true,
+      );
+      await _generateBurstAwareReply(
+        character: character,
         conversationId: conversationId,
         provider: provider,
         apiKey: apiKey,
@@ -878,6 +1329,7 @@ AI 群成员有：$memberNames。
         systemPrompt: MoriConfig.buildSystemPrompt(character),
         showSender: false,
         roundHistory: roundHistory,
+        requestedBurst: requestedBurst,
       );
     }
 
