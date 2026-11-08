@@ -8,6 +8,7 @@ import 'package:mori_ai/services/chat_queue_store.dart';
 import 'package:mori_ai/services/group_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:mori_ai/services/pinned_conversation_store.dart';
+import 'package:mori_ai/services/proactive_message_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 管理多张角色卡以及卡片内容。
@@ -164,6 +165,7 @@ class CharacterStore {
     await ChatQueueStore.instance.saveFor(cardId, const []);
     await MomentStore.instance.deleteForCharacter(cardId);
     await _deleteGroupMessages(cardId);
+    await ProactiveMessageStore.instance.deleteState(cardId);
     try {
       await PinnedConversationStore.instance.setPinned(cardId, false);
     } catch (_) {

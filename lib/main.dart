@@ -9,6 +9,8 @@ import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/moment_interaction_settings_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:mori_ai/services/pinned_conversation_store.dart';
+import 'package:mori_ai/services/proactive_message_service.dart';
+import 'package:mori_ai/services/proactive_message_store.dart';
 import 'package:mori_ai/services/theme_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
 
@@ -23,10 +25,12 @@ Future<void> main() async {
     PinnedConversationStore.instance.load(),
     MomentStore.instance.load(),
     MomentInteractionSettingsStore.instance.load(),
+    ProactiveMessageStore.instance.load(),
     AvatarStore.instance.load(),
     ThemeStore.instance.load(),
   ]);
   runApp(const MoriApp());
+  ProactiveMessageService.instance.start();
 }
 
 class MoriApp extends StatelessWidget {

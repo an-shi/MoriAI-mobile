@@ -21,3 +21,21 @@ String stripLeadingSpeakerName(String text, String name) {
   }
   return result;
 }
+
+/// 清理模型生成的聊天文本：去掉开头角色名前缀和包裹引号。
+String normalizeGeneratedChatText(String text, String name) {
+  var result = stripLeadingSpeakerName(text, name).trim();
+  if (result.length >= 2) {
+    final first = result[0];
+    final last = result[result.length - 1];
+    final wrapped =
+        (first == '“' && last == '”') ||
+        (first == '「' && last == '」') ||
+        (first == '『' && last == '』') ||
+        (first == '"' && last == '"');
+    if (wrapped) {
+      result = result.substring(1, result.length - 1).trim();
+    }
+  }
+  return result;
+}

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mori_ai/main.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/group_store.dart';
+import 'package:mori_ai/services/moment_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -10,12 +11,14 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await CharacterStore.instance.load();
     await GroupStore.instance.load();
+    await MomentStore.instance.load();
   });
 
   tearDown(() async {
     SharedPreferences.setMockInitialValues({});
     await CharacterStore.instance.load();
     await GroupStore.instance.load();
+    await MomentStore.instance.load();
   });
 
   testWidgets('bottom navigation switches between pages', (tester) async {
@@ -30,11 +33,10 @@ void main() {
     expect(find.text('记忆'), findsOneWidget);
     expect(find.text('角色卡'), findsOneWidget);
 
-    await tester.tap(find.text('设置'));
+    await tester.tap(find.text('动态'));
     await tester.pumpAndSettle();
-    expect(find.text('模型'), findsOneWidget);
-    expect(find.text('外观'), findsOneWidget);
-    expect(find.text('关于 Mori'), findsOneWidget);
+    expect(find.text('最新动态'), findsOneWidget);
+    expect(find.text('还没有动态'), findsOneWidget);
   });
 
   testWidgets('user profile is on the left and add menu is on the right', (
@@ -55,6 +57,7 @@ void main() {
     await tester.tap(find.byTooltip('个人资料'));
     await tester.pumpAndSettle();
     expect(find.text('个人信息'), findsOneWidget);
+    expect(find.text('设置'), findsOneWidget);
     expect(tester.getTopLeft(find.byType(Drawer)).dx, lessThan(1));
 
     await tester.tap(find.text('个人信息'));
@@ -112,9 +115,13 @@ void main() {
 
   testWidgets('settings categories open their own pages', (tester) async {
     await tester.pumpWidget(const MoriApp());
+    await tester.pumpAndSettle();
 
+    await tester.tap(find.byTooltip('个人资料'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('设置'));
     await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, '设置'), findsOneWidget);
 
     await tester.tap(find.text('模型'));
     await tester.pumpAndSettle();
@@ -131,5 +138,23 @@ void main() {
     expect(find.text('跟随系统'), findsOneWidget);
     expect(find.text('浅色模式'), findsOneWidget);
     expect(find.text('深色模式'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('动态互动'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, '动态互动'), findsOneWidget);
+    expect(find.text('自动评论人数'), findsOneWidget);
+    expect(find.text('自动回复层数'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('自动消息'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('自动消息'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, '自动消息'), findsOneWidget);
+    expect(find.text('启用自动消息'), findsOneWidget);
   });
 }

@@ -22,4 +22,10 @@ void main() {
   test('does nothing when the speaker name is empty', () {
     expect(stripLeadingSpeakerName('Mori：早上好。', ''), 'Mori：早上好。');
   });
+
+  test('normalizes generated text by removing names and outer quotes', () {
+    expect(normalizeGeneratedChatText('Mori：早上好。', 'Mori'), '早上好。');
+    expect(normalizeGeneratedChatText('「今天也要早点睡」', 'Mori'), '今天也要早点睡');
+    expect(normalizeGeneratedChatText('“晚安。”', 'Mori'), '晚安。');
+  });
 }

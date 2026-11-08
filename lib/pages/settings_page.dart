@@ -5,8 +5,10 @@ import 'package:mori_ai/pages/settings/about_settings_page.dart';
 import 'package:mori_ai/pages/settings/appearance_settings_page.dart';
 import 'package:mori_ai/pages/settings/model_settings_page.dart';
 import 'package:mori_ai/pages/settings/moment_interaction_settings_page.dart';
+import 'package:mori_ai/pages/settings/proactive_message_settings_page.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/moment_interaction_settings_store.dart';
+import 'package:mori_ai/services/proactive_message_store.dart';
 import 'package:mori_ai/services/theme_store.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -23,6 +25,7 @@ class SettingsPage extends StatelessWidget {
           ModelStore.instance.presets,
           ThemeStore.instance.themeMode,
           MomentInteractionSettingsStore.instance.settings,
+          ProactiveMessageStore.instance.settings,
         ]),
         builder: (context, _) {
           final theme = Theme.of(context);
@@ -76,6 +79,19 @@ class SettingsPage extends StatelessWidget {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const MomentInteractionSettingsPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  const _SettingsMenuDivider(),
+                  _SettingsMenuTile(
+                    icon: Icons.notifications_active_outlined,
+                    title: '自动消息',
+                    subtitle: _proactiveMessageSummary(),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const ProactiveMessageSettingsPage(),
                         ),
                       );
                     },
@@ -155,6 +171,20 @@ class SettingsPage extends StatelessWidget {
         ? '回复关闭'
         : '回复 ${settings.autoReplyDepth} 层';
     return '$comments · $replies';
+  }
+
+  String _proactiveMessageSummary() {
+    final settings = ProactiveMessageStore.instance.settings.value;
+    if (!settings.enabled) {
+      return '关闭';
+    }
+    final silence = settings.silenceEnabled
+        ? '沉默 ${settings.silenceMinMinutes}-${settings.silenceMaxMinutes} 分钟'
+        : '沉默关闭';
+    final scheduled = settings.scheduledEnabled
+        ? '定时 ${settings.scheduledTimes.length} 个'
+        : '定时关闭';
+    return '$silence · $scheduled · 每日 ${settings.dailyLimit} 条';
   }
 }
 
