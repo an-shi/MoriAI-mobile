@@ -6,6 +6,7 @@ import 'package:mori_ai/services/avatar_store.dart';
 import 'package:mori_ai/services/character_activity_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_queue_store.dart';
+import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/group_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:mori_ai/services/pinned_conversation_store.dart';
@@ -168,6 +169,7 @@ class CharacterStore {
     await _deleteGroupMessages(cardId);
     await ProactiveMessageStore.instance.deleteState(cardId);
     await CharacterActivityStore.instance.clearForCharacter(cardId);
+    await DiaryStore.instance.clearForCharacter(cardId);
     try {
       await PinnedConversationStore.instance.setPinned(cardId, false);
     } catch (_) {

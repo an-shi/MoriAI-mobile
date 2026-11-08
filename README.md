@@ -1,6 +1,6 @@
 # Mori
 
-Mori 是一个使用 Flutter 开发的移动端 AI 陪伴助手，当前包含对话、记忆、设置三个基础页面，对话页已接入 DeepSeek 官方 API。
+Mori 是一个使用 Flutter 开发的移动端 AI 陪伴助手，当前包含对话、记忆与角色卡、动态三个主页面，支持角色卡、群聊、动态、自动消息、心情和每日日记。
 
 ## 运行
 
@@ -46,6 +46,6 @@ POST https://api.deepseek.com/chat/completions
 lib/
 ├── config/       模型列表、接口地址和系统提示词
 ├── models/       聊天消息模型
-├── pages/        对话、记忆、设置页面
-└── services/     DeepSeek API、API Key 与模型选择的存储
+├── pages/        对话、记忆与角色卡、日记、动态、设置页面
+└── services/     模型请求、存储、自动消息、心情与日记
 ```

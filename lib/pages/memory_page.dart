@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mori_ai/pages/memory/character_card_settings_page.dart';
+import 'package:mori_ai/pages/memory/diary_page.dart';
 import 'package:mori_ai/pages/memory/memory_settings_page.dart';
 
 class MemoryPage extends StatelessWidget {
@@ -38,6 +39,22 @@ class MemoryPage extends StatelessWidget {
                     MaterialPageRoute<void>(
                       builder: (_) => const MemorySettingsPage(),
                     ),
+                  );
+                },
+              ),
+              Divider(
+                height: 1,
+                indent: 72,
+                endIndent: 16,
+                color: colors.outlineVariant,
+              ),
+              _MemoryMenuTile(
+                icon: Icons.menu_book_outlined,
+                title: '日记',
+                subtitle: '查看角色每天写下的日记',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => const DiaryPage()),
                   );
                 },
               ),
