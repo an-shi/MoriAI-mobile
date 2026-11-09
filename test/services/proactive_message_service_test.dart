@@ -220,6 +220,90 @@ void main() {
     expect(requestBody, contains('有点低落'));
   });
 
+  test('purpose engine selects a purpose before the silence message', () async {
+    final now = DateTime.now();
+    var calls = 0;
+    final client = MockClient.streaming((request, bodyStream) async {
+      calls++;
+      final body = utf8.decode(await bodyStream.toBytes());
+      if (calls == 1) {
+        expect(body, contains('目的引擎'));
+        final payload = jsonEncode({
+          'purpose': '问问用户昨天说的面试结果',
+          'reason': '用户昨天提到今天面试',
+          'messageAngle': '先关心结果，不要催',
+        });
+        final sse =
+            'data: {"choices":[{"delta":{"content":${jsonEncode(payload)}}}]}\n'
+            'data: [DONE]\n';
+        return http.StreamedResponse(
+          Stream.value(utf8.encode(sse)),
+          200,
+          headers: {'content-type': 'text/event-stream'},
+        );
+      }
+      expect(body, contains('本轮目的'));
+      expect(body, contains('面试结果'));
+      const sse =
+          'data: {"choices":[{"delta":{"content":"面试结果怎么样啦"}}]}\n'
+          'data: [DONE]\n';
+      return http.StreamedResponse(
+        Stream.value(utf8.encode(sse)),
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      );
+    });
+    final chatService = ChatService(client: client);
+    addTearDown(chatService.dispose);
+    final service = ProactiveMessageService.test(
+      chatService: chatService,
+      random: _AlwaysZeroRandom(),
+    );
+
+    await ProactiveMessageStore.instance.saveSettings(
+      const ProactiveMessageSettings(
+        enabled: true,
+        silenceEnabled: true,
+        scheduledEnabled: false,
+        purposeEnabled: true,
+      ),
+    );
+    await ChatHistoryStore.instance.saveFor(CharacterProfile.presetMoriId, [
+      ChatMessage(
+        id: 'purpose_user',
+        role: ChatRole.user,
+        content: '我明天面试，有点紧张。',
+        createdAt: now.subtract(const Duration(hours: 2)),
+      ),
+      ChatMessage(
+        id: 'purpose_assistant',
+        role: ChatRole.assistant,
+        content: '别太紧张，你已经准备得很好了。',
+        createdAt: now.subtract(const Duration(hours: 2)),
+      ),
+    ]);
+    await ProactiveMessageStore.instance.saveState(
+      CharacterProfile.presetMoriId,
+      ProactiveMessageState(
+        lastActivityAtMs: now
+            .subtract(const Duration(hours: 2))
+            .millisecondsSinceEpoch,
+        nextSilenceAtMs: now
+            .subtract(const Duration(minutes: 1))
+            .millisecondsSinceEpoch,
+        dailyDate: _dateKey(now),
+      ),
+    );
+
+    await service.runCheckForTest();
+
+    expect(calls, 2);
+    final history = await ChatHistoryStore.instance.loadFor(
+      CharacterProfile.presetMoriId,
+    );
+    expect(history.last.content, '面试结果怎么样啦');
+  });
+
   test('manual trigger reports missing model configuration', () async {
     await ModelStore.instance.saveSelection(
       const ModelSelection(

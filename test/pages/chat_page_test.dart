@@ -12,6 +12,7 @@ import 'package:mori_ai/models/chat_message.dart';
 import 'package:mori_ai/models/diary.dart';
 import 'package:mori_ai/models/memory.dart';
 import 'package:mori_ai/models/model_option.dart';
+import 'package:mori_ai/models/mood.dart';
 import 'package:mori_ai/models/model_settings.dart';
 import 'package:mori_ai/pages/chat_page.dart';
 import 'package:mori_ai/services/api_key_store.dart';
@@ -22,6 +23,7 @@ import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/model_store.dart';
+import 'package:mori_ai/services/mood_judge_service.dart';
 import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/unread_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -463,6 +465,25 @@ void main() {
     expect(mood.label, anyOf('心情不错', '超开心'));
   });
 
+  testWidgets('uses model mood judgment when enabled', (tester) async {
+    await MoodStore.instance.saveSettings(
+      const MoodSettings(modelJudgeEnabled: true),
+    );
+    var calls = 0;
+    final judge = MoodJudgeService(
+      complete: ({required systemPrompt, required userPrompt}) async {
+        calls++;
+        return '{"delta":20,"reason":"用户夸了角色"}';
+      },
+    );
+    await _prepareBurstTest(tester, '第一句', moodJudgeService: judge);
+
+    expect(calls, 1);
+    final mood = MoodStore.instance.snapshotFor(CharacterProfile.presetMoriId);
+    expect(mood.value, 80);
+    expect(mood.reason, '用户夸了角色');
+  });
+
   testWidgets('forces comma split when the user asks for multiple messages', (
     tester,
   ) async {
@@ -546,6 +567,7 @@ Future<void> _prepareBurstTest(
   List<String>? requestBodies,
   List<String>? contents,
   int waitRounds = 1,
+  MoodJudgeService? moodJudgeService,
 }) async {
   await ModelStore.instance.saveModels(
     ModelProviderCatalog.defaultProviderId,
@@ -588,6 +610,7 @@ Future<void> _prepareBurstTest(
         body: ChatPage(
           characterId: CharacterProfile.presetMoriId,
           chatService: service,
+          moodJudgeService: moodJudgeService,
         ),
       ),
     ),

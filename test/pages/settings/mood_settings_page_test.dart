@@ -31,6 +31,11 @@ void main() {
     expect(find.text('启用心情'), findsOneWidget);
     expect(find.text('角色心情'), findsOneWidget);
     expect(find.text('心情基线'), findsOneWidget);
+    expect(find.text('使用模型判断心情'), findsOneWidget);
+
+    await tester.tap(find.text('使用模型判断心情'));
+    await tester.pumpAndSettle();
+    expect(MoodStore.instance.settings.value.modelJudgeEnabled, isTrue);
 
     await tester.tap(find.text('启用心情'));
     await tester.pumpAndSettle();

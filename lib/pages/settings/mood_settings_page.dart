@@ -93,6 +93,26 @@ class MoodSettingsPage extends StatelessWidget {
                               );
                             },
                           ),
+                          const SizedBox(height: 8),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('使用模型判断心情'),
+                            subtitle: const Text(
+                              '单聊每次用户发言会多调用一次模型；关闭时使用本地关键词判断。',
+                            ),
+                            value: settings.modelJudgeEnabled,
+                            onChanged: settings.enabled
+                                ? (value) {
+                                    unawaited(
+                                      MoodStore.instance.saveSettings(
+                                        settings.copyWith(
+                                          modelJudgeEnabled: value,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                : null,
+                          ),
                         ],
                       ),
                     ),
@@ -101,7 +121,7 @@ class MoodSettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                '当前根据聊天关键词判断心情；模型判断和更细的行为影响可以后续再加。',
+                '默认根据聊天关键词判断心情；开启模型判断后会结合上下文理解语气，但会增加一次模型调用。',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: colors.onSurfaceVariant,
                 ),

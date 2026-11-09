@@ -138,6 +138,7 @@ int scoreMoodText(String text) {
 class MoodSettings {
   const MoodSettings({
     this.enabled = true,
+    this.modelJudgeEnabled = false,
     this.base = 60,
     this.halfLifeHours = 3,
   });
@@ -145,20 +146,31 @@ class MoodSettings {
   static const defaults = MoodSettings();
 
   final bool enabled;
+
+  /// 是否用模型判断用户消息对心情的影响；默认关闭，会增加模型调用。
+  final bool modelJudgeEnabled;
+
   final int base;
   final int halfLifeHours;
 
   MoodSettings normalized() {
     return MoodSettings(
       enabled: enabled,
+      modelJudgeEnabled: modelJudgeEnabled,
       base: base.clamp(0, 100).toInt(),
       halfLifeHours: halfLifeHours.clamp(1, 24).toInt(),
     );
   }
 
-  MoodSettings copyWith({bool? enabled, int? base, int? halfLifeHours}) {
+  MoodSettings copyWith({
+    bool? enabled,
+    bool? modelJudgeEnabled,
+    int? base,
+    int? halfLifeHours,
+  }) {
     return MoodSettings(
       enabled: enabled ?? this.enabled,
+      modelJudgeEnabled: modelJudgeEnabled ?? this.modelJudgeEnabled,
       base: base ?? this.base,
       halfLifeHours: halfLifeHours ?? this.halfLifeHours,
     ).normalized();
@@ -166,6 +178,7 @@ class MoodSettings {
 
   Map<String, dynamic> toJson() => {
     'enabled': enabled,
+    'modelJudgeEnabled': modelJudgeEnabled,
     'base': base,
     'halfLifeHours': halfLifeHours,
   };
@@ -183,6 +196,10 @@ class MoodSettings {
 
     return MoodSettings(
       enabled: readBool('enabled', defaults.enabled),
+      modelJudgeEnabled: readBool(
+        'modelJudgeEnabled',
+        defaults.modelJudgeEnabled,
+      ),
       base: readInt('base', defaults.base),
       halfLifeHours: readInt('halfLifeHours', defaults.halfLifeHours),
     ).normalized();

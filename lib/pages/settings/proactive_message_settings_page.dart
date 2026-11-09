@@ -291,6 +291,26 @@ class _ProactiveMessageSettingsPageState
                         )
                       : null,
                 ),
+                Divider(
+                  height: 1,
+                  indent: 16,
+                  endIndent: 16,
+                  color: colors.outlineVariant,
+                ),
+                SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  title: const Text('目的引擎（实验性）'),
+                  subtitle: const Text('开启后沉默搭话会先多调用一次模型选择目的；默认关闭。'),
+                  value: _settings.purposeEnabled,
+                  onChanged: _settings.enabled
+                      ? (value) => _updateAndSave(
+                          _settings.copyWith(purposeEnabled: value),
+                        )
+                      : null,
+                ),
               ],
             ),
           ),

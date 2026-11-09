@@ -20,6 +20,7 @@ import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/diary_context_builder.dart';
 import 'package:mori_ai/services/memory_context_builder.dart';
 import 'package:mori_ai/services/model_store.dart';
+import 'package:mori_ai/services/mood_judge_service.dart';
 import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
 import 'package:mori_ai/services/unread_store.dart';
@@ -32,11 +33,18 @@ import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/user_avatar.dart';
 
 class ChatPage extends StatefulWidget {
-  const ChatPage({super.key, this.group, this.characterId, this.chatService});
+  const ChatPage({
+    super.key,
+    this.group,
+    this.characterId,
+    this.chatService,
+    this.moodJudgeService,
+  });
 
   final GroupProfile? group;
   final String? characterId;
   final ChatService? chatService;
+  final MoodJudgeService? moodJudgeService;
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -1347,12 +1355,32 @@ AI 群成员有：$memberNames。
         _showSnackBar('角色卡不存在或已被删除');
         return;
       }
-      await MoodStore.instance.observe(
-        character.id,
-        userMessage.content,
-        direct: true,
-        owner: true,
-      );
+      MoodJudgeResult? judged;
+      if (MoodStore.instance.settings.value.enabled &&
+          MoodStore.instance.settings.value.modelJudgeEnabled) {
+        judged = await (widget.moodJudgeService ?? MoodJudgeService.instance)
+            .judge(
+              characterName: character.displayName,
+              currentMood: MoodStore.instance.snapshotFor(character.id).value,
+              userText: userMessage.content,
+              recentMessages: _messages,
+            );
+        if (judged != null) {
+          await MoodStore.instance.nudge(
+            character.id,
+            judged.delta,
+            judged.reason,
+          );
+        }
+      }
+      if (judged == null) {
+        await MoodStore.instance.observe(
+          character.id,
+          userMessage.content,
+          direct: true,
+          owner: true,
+        );
+      }
       await _generateBurstAwareReply(
         character: character,
         conversationId: conversationId,

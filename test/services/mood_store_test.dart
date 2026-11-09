@@ -19,6 +19,7 @@ void main() {
   test('loads defaults and clamps settings', () async {
     final defaults = MoodStore.instance.settings.value;
     expect(defaults.enabled, isTrue);
+    expect(defaults.modelJudgeEnabled, isFalse);
     expect(defaults.base, 60);
     expect(defaults.halfLifeHours, 3);
 
@@ -87,7 +88,12 @@ void main() {
 
   test('persists mood state and settings, and can reset', () async {
     await MoodStore.instance.saveSettings(
-      const MoodSettings(enabled: true, base: 70, halfLifeHours: 6),
+      const MoodSettings(
+        enabled: true,
+        modelJudgeEnabled: true,
+        base: 70,
+        halfLifeHours: 6,
+      ),
     );
     await MoodStore.instance.nudge('mori', 20, '被夸了');
     expect(MoodStore.instance.snapshotFor('mori').value, 90);
@@ -95,6 +101,7 @@ void main() {
     await MoodStore.instance.load();
     expect(MoodStore.instance.settings.value.base, 70);
     expect(MoodStore.instance.settings.value.halfLifeHours, 6);
+    expect(MoodStore.instance.settings.value.modelJudgeEnabled, isTrue);
     expect(MoodStore.instance.snapshotFor('mori').reason, '被夸了');
     expect(MoodStore.instance.snapshotFor('mori').history, isNotEmpty);
 

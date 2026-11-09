@@ -9,6 +9,7 @@ class ProactiveMessageSettings {
     this.maxUnanswered = 3,
     this.nudgeEnabled = true,
     this.notificationsEnabled = true,
+    this.purposeEnabled = false,
     this.quietHoursEnabled = true,
     this.quietStartMinutes = 23 * 60 + 30,
     this.quietEndMinutes = 7 * 60,
@@ -29,6 +30,7 @@ class ProactiveMessageSettings {
   final int maxUnanswered;
   final bool nudgeEnabled;
   final bool notificationsEnabled;
+  final bool purposeEnabled;
   final bool quietHoursEnabled;
   final int quietStartMinutes;
   final int quietEndMinutes;
@@ -108,6 +110,7 @@ class ProactiveMessageSettings {
       maxUnanswered: _normalizeLimit(maxUnanswered),
       nudgeEnabled: nudgeEnabled,
       notificationsEnabled: notificationsEnabled,
+      purposeEnabled: purposeEnabled,
       quietHoursEnabled: quietHoursEnabled,
       quietStartMinutes: quietStartMinutes.clamp(0, 24 * 60 - 1),
       quietEndMinutes: quietEndMinutes.clamp(0, 24 * 60 - 1),
@@ -132,6 +135,7 @@ class ProactiveMessageSettings {
     int? maxUnanswered,
     bool? nudgeEnabled,
     bool? notificationsEnabled,
+    bool? purposeEnabled,
     bool? quietHoursEnabled,
     int? quietStartMinutes,
     int? quietEndMinutes,
@@ -147,6 +151,7 @@ class ProactiveMessageSettings {
       maxUnanswered: maxUnanswered ?? this.maxUnanswered,
       nudgeEnabled: nudgeEnabled ?? this.nudgeEnabled,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
+      purposeEnabled: purposeEnabled ?? this.purposeEnabled,
       quietHoursEnabled: quietHoursEnabled ?? this.quietHoursEnabled,
       quietStartMinutes: quietStartMinutes ?? this.quietStartMinutes,
       quietEndMinutes: quietEndMinutes ?? this.quietEndMinutes,
@@ -164,6 +169,7 @@ class ProactiveMessageSettings {
     'maxUnanswered': maxUnanswered,
     'nudgeEnabled': nudgeEnabled,
     'notificationsEnabled': notificationsEnabled,
+    'purposeEnabled': purposeEnabled,
     'quietHoursEnabled': quietHoursEnabled,
     'quietStartMinutes': quietStartMinutes,
     'quietEndMinutes': quietEndMinutes,
@@ -208,6 +214,7 @@ class ProactiveMessageSettings {
         'notificationsEnabled',
         defaults.notificationsEnabled,
       ),
+      purposeEnabled: readBool('purposeEnabled', defaults.purposeEnabled),
       quietHoursEnabled: readBool(
         'quietHoursEnabled',
         defaults.quietHoursEnabled,

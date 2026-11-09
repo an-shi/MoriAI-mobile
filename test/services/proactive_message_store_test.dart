@@ -24,6 +24,10 @@ void main() {
       ProactiveMessageStore.instance.settings.value.notificationsEnabled,
       isTrue,
     );
+    expect(
+      ProactiveMessageStore.instance.settings.value.purposeEnabled,
+      isFalse,
+    );
     expect(ProactiveMessageStore.instance.settings.value.scheduledTimes, [
       '08:30',
       '22:30',
@@ -36,6 +40,7 @@ void main() {
         silenceMaxMinutes: 120,
         nudgeEnabled: false,
         notificationsEnabled: false,
+        purposeEnabled: true,
         scheduledTimes: ['09:15', '23:00'],
       ),
     );
@@ -47,6 +52,7 @@ void main() {
     expect(loaded.silenceMaxMinutes, 120);
     expect(loaded.nudgeEnabled, isFalse);
     expect(loaded.notificationsEnabled, isFalse);
+    expect(loaded.purposeEnabled, isTrue);
     expect(loaded.scheduledTimes, ['09:15', '23:00']);
   });
 

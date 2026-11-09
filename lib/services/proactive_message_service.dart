@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/widgets.dart';
@@ -59,6 +60,7 @@ class ProactiveMessageService with WidgetsBindingObserver {
   static const _retryDelay = Duration(minutes: 60);
   static const _scheduledRetryDelay = Duration(minutes: 30);
   static const _maxHistoryMessages = 30;
+  static const _maxPurposeMessages = 20;
   static const _maxBubbles = 5;
   static const _maxBubbleLength = 200;
   static const _nudgeMinDelay = Duration(minutes: 15);
@@ -601,10 +603,35 @@ class ProactiveMessageService with WidgetsBindingObserver {
       final prompt = nudge
           ? _nudgePrompt(character, state, startedAt)
           : _triggerPrompt(character, state, startedAt);
+      final settings = ProactiveMessageStore.instance.settings.value;
+      String? purpose;
+      if (settings.purposeEnabled &&
+          !nudge &&
+          !manual &&
+          scheduledSlotKey == null) {
+        purpose = await _selectPurpose(character, history, startedAt);
+        if (purpose == null) {
+          // 目的引擎没有找到足够真实的素材，这轮不硬找话。
+          await _saveState(
+            conversationId,
+            _markScheduledSlot(
+              state.copyWith(
+                nextSilenceAtMs: startedAt
+                    .add(_randomSilence())
+                    .millisecondsSinceEpoch,
+              ),
+              scheduledSlotKey,
+            ),
+          );
+          _scheduledRetryAfter.remove(conversationId);
+          return false;
+        }
+      }
       final content = await _generate(
         character: character,
         history: history,
         trigger: prompt,
+        purpose: purpose,
       );
 
       if (CharacterStore.instance.cardById(conversationId) == null) {
@@ -772,10 +799,157 @@ class ProactiveMessageService with WidgetsBindingObserver {
     }
   }
 
+  Future<String?> _selectPurpose(
+    CharacterProfile character,
+    List<ChatMessage> history,
+    DateTime now,
+  ) async {
+    final selection = ModelStore.instance.selection.value;
+    final provider =
+        ModelProviderCatalog.byId(selection.providerId) ??
+        ModelProviderCatalog.defaultProvider;
+    final apiKey = ApiKeyStore.instance.keyFor(provider.id).value?.trim() ?? '';
+    if (apiKey.isEmpty || !selection.hasModel) {
+      return null;
+    }
+
+    final recent = history.length > _maxPurposeMessages
+        ? history.sublist(history.length - _maxPurposeMessages)
+        : history;
+    final transcript = StringBuffer();
+    for (final message in recent) {
+      final content = message.content.trim();
+      if (content.isEmpty) {
+        continue;
+      }
+      final who = message.isUser
+          ? (message.senderName.trim().isEmpty
+                ? '用户'
+                : message.senderName.trim())
+          : '我';
+      transcript.writeln(
+        '$who：${content.length > 120 ? '${content.substring(0, 120)}…' : content}',
+      );
+    }
+    var memoryQuery = '';
+    for (final message in recent.reversed) {
+      if (message.isUser && message.content.trim().isNotEmpty) {
+        memoryQuery = message.content.trim();
+        break;
+      }
+    }
+    final memoryContext = MemoryContextBuilder.instance.buildForProactive(
+      character.id,
+      query: memoryQuery,
+    );
+    final diaryContext = DiaryContextBuilder.instance.buildForProactive(
+      character.id,
+    );
+    final recentMoments = MomentStore.instance.moments.value
+        .where(
+          (moment) =>
+              moment.authorId == character.id &&
+              moment.content.trim().isNotEmpty,
+        )
+        .take(3)
+        .map((moment) {
+          final content = moment.content.trim();
+          return '- ${content.length > 80 ? '${content.substring(0, 80)}…' : content}';
+        })
+        .join('\n');
+
+    final systemPrompt =
+        '''
+你是一个角色主动消息的“目的引擎”。你要根据真实素材，判断角色「${character.displayName}」现在最想主动做什么。
+只选一个最自然、最有依据的目的，不要为了发消息而硬找话题，不要编造素材里不存在的事件、地点或人物。
+优先使用：最近聊天、长期记忆、人物小档案、未完成话题、最近日记、角色自己的动态。
+如果素材不足以支撑一次自然的主动搭话，输出 {"purpose":"[沉默]"}。
+输出 JSON 对象，不要输出 Markdown 或额外文字：
+{"purpose":"一句具体的目的","reason":"依据哪条真实素材","messageAngle":"生成消息时的切入角度"}
+目的要克制、具体，例如：问问用户昨天说的面试结果、顺口提一下自己刚看到的晚霞、关心用户最近是不是太累。''';
+
+    final userPrompt =
+        '''
+现在是 ${now.month} 月 ${now.day} 日 ${_timeLabel(now)}。
+${transcript.isEmpty ? '【最近聊天】\n（暂无）' : '【最近聊天】\n${transcript.toString().trim()}'}
+${memoryContext.isEmpty ? '' : '\n\n$memoryContext'}
+${diaryContext.isEmpty ? '' : '\n\n$diaryContext'}
+${recentMoments.isEmpty ? '' : '\n\n【我最近发过的动态】\n$recentMoments'}
+
+请判断这一轮最想主动做什么。''';
+
+    try {
+      final chunks = await _chatService
+          .streamChat(
+            [ChatMessage(role: ChatRole.user, content: userPrompt)],
+            provider: provider,
+            apiKey: apiKey,
+            model: selection.modelId,
+            systemPrompt: systemPrompt,
+            temperature: 0.9,
+          )
+          .toList();
+      final raw = chunks.join().trim();
+      return _parsePurpose(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _parsePurpose(String raw) {
+    var cleaned = raw.trim();
+    cleaned = cleaned
+        .replaceAll(RegExp(r'^```(?:json)?\s*', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s*```$'), '')
+        .trim();
+    final start = cleaned.indexOf('{');
+    final end = cleaned.lastIndexOf('}');
+    if (start < 0 || end <= start) {
+      return null;
+    }
+    Object? decoded;
+    try {
+      decoded = jsonDecode(cleaned.substring(start, end + 1));
+    } catch (_) {
+      return null;
+    }
+    if (decoded is! Map) {
+      return null;
+    }
+    final purpose = decoded['purpose'] is String
+        ? (decoded['purpose'] as String).trim()
+        : '';
+    if (purpose.isEmpty ||
+        purpose == '[沉默]' ||
+        purpose == '沉默' ||
+        purpose.length < 4) {
+      return null;
+    }
+    if (_toNoise(purpose).isEmpty) {
+      return null;
+    }
+    final angle = decoded['messageAngle'] is String
+        ? (decoded['messageAngle'] as String).trim()
+        : '';
+    final reason = decoded['reason'] is String
+        ? (decoded['reason'] as String).trim()
+        : '';
+    return [
+      purpose.length > 120 ? purpose.substring(0, 120) : purpose,
+      if (reason.isNotEmpty)
+        '依据：${reason.length > 80 ? reason.substring(0, 80) : reason}',
+      if (angle.isNotEmpty)
+        '切入角度：${angle.length > 80 ? angle.substring(0, 80) : angle}',
+    ].join('\n');
+  }
+
+  String _toNoise(String value) => value.replaceAll(RegExp(r'\s+'), '');
+
   Future<String?> _generate({
     required CharacterProfile character,
     required List<ChatMessage> history,
     required String trigger,
+    String? purpose,
   }) async {
     final selection = ModelStore.instance.selection.value;
     final provider =
@@ -818,7 +992,8 @@ class ProactiveMessageService with WidgetsBindingObserver {
         '${activityContext.isEmpty ? '' : '\n\n$activityContext'}'
         '${memoryContext.isEmpty ? '' : '\n\n$memoryContext'}'
         '${diaryContext.isEmpty ? '' : '\n\n$diaryContext'}'
-        '${moodContext.isEmpty ? '' : '\n\n$moodContext'}';
+        '${moodContext.isEmpty ? '' : '\n\n$moodContext'}'
+        '${purpose == null || purpose.trim().isEmpty ? '' : '\n\n【本轮目的】\n${purpose.trim()}\n请围绕这个目的自然发一条消息；不要解释目的，不要提及系统、模型或自动触发。'}';
     try {
       await for (final chunk in _chatService.streamChat(
         [...recent, ChatMessage(role: ChatRole.user, content: trigger)],
