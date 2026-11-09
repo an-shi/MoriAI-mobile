@@ -193,6 +193,34 @@ class _MemorySettingsPageState extends State<MemorySettingsPage> {
                             }
                           : null,
                     ),
+                    Divider(
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                      color: colors.outlineVariant,
+                    ),
+                    SwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      secondary: Icon(
+                        Icons.groups_2_outlined,
+                        color: colors.primary,
+                      ),
+                      title: const Text('启用群聊公共记忆'),
+                      subtitle: const Text('整理群公共记忆和群印象，只在对应群聊里召回。'),
+                      value: settings.groupMemoryEnabled,
+                      onChanged: settings.enabled
+                          ? (value) {
+                              unawaited(
+                                _save(
+                                  settings.copyWith(groupMemoryEnabled: value),
+                                ),
+                              );
+                            }
+                          : null,
+                    ),
                   ],
                 ),
               ),

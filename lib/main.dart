@@ -9,6 +9,8 @@ import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_burst_settings_store.dart';
 import 'package:mori_ai/services/diary_service.dart';
 import 'package:mori_ai/services/diary_store.dart';
+import 'package:mori_ai/services/group_memory_service.dart';
+import 'package:mori_ai/services/group_memory_store.dart';
 import 'package:mori_ai/services/group_store.dart';
 import 'package:mori_ai/services/memory_service.dart';
 import 'package:mori_ai/services/memory_store.dart';
@@ -29,6 +31,7 @@ Future<void> main() async {
     ModelStore.instance.load(),
     CharacterStore.instance.load(),
     GroupStore.instance.load(),
+    GroupMemoryStore.instance.load(),
     UserProfileStore.instance.load(),
     PinnedConversationStore.instance.load(),
     MomentStore.instance.load(),
@@ -47,6 +50,7 @@ Future<void> main() async {
   ProactiveMessageService.instance.start();
   DiaryService.instance.start();
   MemoryService.instance.start();
+  GroupMemoryService.instance.start();
 }
 
 class MoriApp extends StatelessWidget {

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:mori_ai/models/memory.dart';
+import 'package:mori_ai/services/group_memory_store.dart';
 import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/utils/memory_search.dart';
 
@@ -13,9 +15,69 @@ class MemoryContextBuilder {
     return _build(characterId, query: query);
   }
 
-  /// 群聊不注入单聊记忆，避免把私事带进群里。
-  String buildForGroupChat(String characterId, {String query = ''}) {
-    return '';
+  /// 群聊只注入这个群自己的公共记忆和群印象，不读取单聊记忆。
+  String buildForGroupChat(String groupId, {String query = ''}) {
+    final settings = MemoryStore.instance.settings.value;
+    if (!settings.enabled ||
+        !settings.groupMemoryEnabled ||
+        settings.recallCount <= 0) {
+      return '';
+    }
+    final profile = GroupMemoryStore.instance.profileFor(groupId);
+    final groupEntries = GroupMemoryStore.instance.entriesFor(groupId);
+    final entries = [
+      for (final entry in groupEntries)
+        MemoryEntry(
+          id: entry.id,
+          characterId: entry.groupId,
+          text: entry.text,
+          category: entry.category,
+          importance: entry.importance,
+          tags: entry.tags,
+          source: entry.source,
+          createdAtMs: entry.createdAtMs,
+          updatedAtMs: entry.updatedAtMs,
+          lastAccessedAtMs: entry.lastAccessedAtMs,
+          accessCount: entry.accessCount,
+          isActive: entry.isActive,
+          archivedAtMs: entry.archivedAtMs,
+        ),
+    ];
+    final hits = entries.isEmpty
+        ? const <MemorySearchHit>[]
+        : searchMemories(
+            entries,
+            query,
+            limit: settings.recallCount,
+            fallbackToImportant: query.trim().isEmpty,
+          );
+    if (profile.isEmpty && hits.isEmpty) {
+      return '';
+    }
+
+    final blocks = <String>[];
+    if (profile.isNotEmpty) {
+      blocks.add('【群印象】\n${profile.toContextLines().join('\n')}');
+    }
+    if (hits.isNotEmpty) {
+      unawaited(
+        GroupMemoryStore.instance.touch(hits.map((hit) => hit.entry.id)),
+      );
+      final now = DateTime.now();
+      final lines = <String>[];
+      for (final hit in hits) {
+        final entry = hit.entry;
+        final when = _whenText(entry.updatedAt, now);
+        lines.add(
+          '- [${entry.categoryLabel}${when.isEmpty ? '' : ' · $when'}] '
+          '${_clip(entry.text)}',
+        );
+      }
+      blocks.add('【群公共记忆】\n${lines.join('\n')}');
+    }
+    return '（以下是你长期记得的这个群里的公共事情和群印象，不是用户刚说的。'
+        '只在自然相关时使用，可以自然带出，但不要逐条复述，也不要编造。）\n'
+        '${blocks.join('\n\n')}';
   }
 
   /// 主动消息使用和单聊相同的隐私范围。

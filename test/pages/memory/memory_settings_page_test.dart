@@ -31,8 +31,13 @@ void main() {
 
     expect(find.text('启用长期记忆'), findsOneWidget);
     expect(find.text('自动整理记忆'), findsOneWidget);
+    expect(find.text('启用群聊公共记忆'), findsOneWidget);
     expect(find.text('每次召回条数'), findsOneWidget);
     expect(find.text('立即整理记忆'), findsOneWidget);
+
+    await tester.tap(find.text('启用群聊公共记忆'));
+    await tester.pumpAndSettle();
+    expect(MemoryStore.instance.settings.value.groupMemoryEnabled, isFalse);
 
     await tester.tap(find.text('自动整理记忆'));
     await tester.pumpAndSettle();

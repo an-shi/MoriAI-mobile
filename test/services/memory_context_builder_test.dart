@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mori_ai/models/group_memory.dart';
 import 'package:mori_ai/models/memory.dart';
+import 'package:mori_ai/services/group_memory_store.dart';
 import 'package:mori_ai/services/memory_context_builder.dart';
 import 'package:mori_ai/services/memory_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,11 +12,13 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await MemoryStore.instance.load();
+    await GroupMemoryStore.instance.load();
   });
 
   tearDown(() async {
     SharedPreferences.setMockInitialValues({});
     await MemoryStore.instance.load();
+    await GroupMemoryStore.instance.load();
   });
 
   Future<void> save(String id, String text, {double importance = 0.6}) {
@@ -92,6 +96,71 @@ void main() {
       MemoryContextBuilder.instance.buildForGroupChat('mori', query: '牛奶'),
       isEmpty,
     );
+  });
+
+  test(
+    'injects only the matching group public memory and impression',
+    () async {
+      await save('milk', '用户喜欢睡前喝热牛奶');
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await GroupMemoryStore.instance.saveProfile(
+        GroupMemoryProfile(
+          groupId: 'group_a',
+          summary: '大家像宿舍室友一样熟。',
+          sharedHabits: '经常互相发梗图。',
+          recentFocus: '最近在约看展。',
+          updatedAtMs: now,
+        ),
+      );
+      await GroupMemoryStore.instance.saveEntry(
+        GroupMemoryEntry(
+          id: 'gmem_a',
+          groupId: 'group_a',
+          text: '大家约好下个月一起去看展。',
+          category: MemoryCategory.plan,
+          importance: 0.8,
+          createdAtMs: now,
+          updatedAtMs: now,
+        ),
+      );
+      await GroupMemoryStore.instance.saveEntry(
+        GroupMemoryEntry(
+          id: 'gmem_b',
+          groupId: 'group_b',
+          text: '另一个群一起去看了电影。',
+          createdAtMs: now,
+          updatedAtMs: now,
+        ),
+      );
+
+      final context = MemoryContextBuilder.instance.buildForGroupChat(
+        'group_a',
+        query: '看展',
+      );
+      expect(context, contains('群印象'));
+      expect(context, contains('宿舍室友'));
+      expect(context, contains('梗图'));
+      expect(context, contains('一起去看展'));
+      expect(context, isNot(contains('热牛奶')));
+      expect(context, isNot(contains('另一个群')));
+    },
+  );
+
+  test('returns empty group context when group memory is disabled', () async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await GroupMemoryStore.instance.saveEntry(
+      GroupMemoryEntry(
+        id: 'gmem_a',
+        groupId: 'group_a',
+        text: '大家约好一起去看展。',
+        createdAtMs: now,
+        updatedAtMs: now,
+      ),
+    );
+    await MemoryStore.instance.saveSettings(
+      const MemorySettings(groupMemoryEnabled: false),
+    );
+    expect(MemoryContextBuilder.instance.buildForGroupChat('group_a'), isEmpty);
   });
 
   test('returns empty when memory or recall is disabled', () async {

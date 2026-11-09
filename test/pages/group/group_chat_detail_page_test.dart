@@ -60,6 +60,8 @@ void main() {
     await tester.tap(find.byTooltip('群聊设置'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, '群聊设置'), findsOneWidget);
+    await tester.ensureVisible(find.text('群公共记忆'));
+    expect(find.text('群公共记忆'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), '新的群聊名称');
     await tester.tap(find.text('保存群聊设置'));

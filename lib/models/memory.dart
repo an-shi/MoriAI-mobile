@@ -481,6 +481,7 @@ class MemoryOpenTopic {
 class MemorySettings {
   const MemorySettings({
     this.enabled = true,
+    this.groupMemoryEnabled = true,
     this.autoExtract = true,
     this.recallCount = 6,
     this.extractIdleMinutes = 10,
@@ -491,6 +492,7 @@ class MemorySettings {
   static const defaults = MemorySettings();
 
   final bool enabled;
+  final bool groupMemoryEnabled;
   final bool autoExtract;
   final int recallCount;
   final int extractIdleMinutes;
@@ -500,6 +502,7 @@ class MemorySettings {
   MemorySettings normalized() {
     return MemorySettings(
       enabled: enabled,
+      groupMemoryEnabled: groupMemoryEnabled,
       autoExtract: autoExtract,
       recallCount: recallCount.clamp(0, 20).toInt(),
       extractIdleMinutes: extractIdleMinutes < 1 ? 1 : extractIdleMinutes,
@@ -512,6 +515,7 @@ class MemorySettings {
 
   MemorySettings copyWith({
     bool? enabled,
+    bool? groupMemoryEnabled,
     bool? autoExtract,
     int? recallCount,
     int? extractIdleMinutes,
@@ -520,6 +524,7 @@ class MemorySettings {
   }) {
     return MemorySettings(
       enabled: enabled ?? this.enabled,
+      groupMemoryEnabled: groupMemoryEnabled ?? this.groupMemoryEnabled,
       autoExtract: autoExtract ?? this.autoExtract,
       recallCount: recallCount ?? this.recallCount,
       extractIdleMinutes: extractIdleMinutes ?? this.extractIdleMinutes,
@@ -531,6 +536,7 @@ class MemorySettings {
 
   Map<String, dynamic> toJson() => {
     'enabled': enabled,
+    'groupMemoryEnabled': groupMemoryEnabled,
     'autoExtract': autoExtract,
     'recallCount': recallCount,
     'extractIdleMinutes': extractIdleMinutes,
@@ -551,6 +557,10 @@ class MemorySettings {
 
     return MemorySettings(
       enabled: readBool('enabled', defaults.enabled),
+      groupMemoryEnabled: readBool(
+        'groupMemoryEnabled',
+        defaults.groupMemoryEnabled,
+      ),
       autoExtract: readBool('autoExtract', defaults.autoExtract),
       recallCount: readInt('recallCount', defaults.recallCount),
       extractIdleMinutes: readInt(

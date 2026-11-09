@@ -574,7 +574,10 @@ AI 群成员有：$memberNames。
       }
     }
     final memoryContext = showSender
-        ? ''
+        ? MemoryContextBuilder.instance.buildForGroupChat(
+            widget.group!.id,
+            query: memoryQuery,
+          )
         : MemoryContextBuilder.instance.buildForPrivateChat(
             responder.id,
             query: memoryQuery,

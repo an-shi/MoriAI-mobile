@@ -9,6 +9,7 @@ import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_queue_store.dart';
 import 'package:mori_ai/services/group_store.dart';
+import 'package:mori_ai/pages/group/group_memory_page.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/group_avatar.dart';
 
@@ -428,6 +429,32 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                   )
                 : const Icon(Icons.save_outlined),
             label: Text(_selectedIds.length < 2 ? '至少选择两个成员' : '保存群聊设置'),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            elevation: 0,
+            color: colors.surfaceContainerLow,
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 6,
+              ),
+              leading: Icon(Icons.groups_2_outlined, color: colors.primary),
+              title: const Text('群公共记忆'),
+              subtitle: const Text('查看群印象和大家共同记住的事'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => GroupMemoryPage(groupId: widget.groupId),
+                  ),
+                );
+              },
+            ),
           ),
           const SizedBox(height: 16),
           Card(
