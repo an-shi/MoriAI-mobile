@@ -32,9 +32,17 @@ void main() {
     expect(find.text('启用每日日记'), findsOneWidget);
     expect(find.text('全局默认写作时间'), findsOneWidget);
     expect(find.textContaining('每天 22:30 左右'), findsOneWidget);
+    expect(find.text('让角色记得最近的日记'), findsOneWidget);
+    expect(find.text('召回日记条数'), findsOneWidget);
     expect(find.text('立即写一篇'), findsOneWidget);
     expect(find.text('角色单独设置'), findsOneWidget);
     expect(find.text('Mori'), findsOneWidget);
+
+    await tester.tap(find.text('让角色记得最近的日记'));
+    await tester.pumpAndSettle();
+
+    expect(DiaryStore.instance.settings.value.recallEnabled, isFalse);
+    expect(find.text('召回日记条数'), findsNothing);
 
     await tester.tap(find.text('启用每日日记'));
     await tester.pumpAndSettle();

@@ -22,17 +22,38 @@ void main() {
     final defaults = DiaryStore.instance.settings.value;
     expect(defaults.enabled, isFalse);
     expect(defaults.timeLabel, '22:30');
+    expect(defaults.recallEnabled, isTrue);
+    expect(defaults.recallCount, 2);
 
     final normalized = const DiarySettings(timeMinutes: 3000).normalized();
     expect(normalized.timeMinutes, 24 * 60 - 1);
     expect(const DiarySettings(timeMinutes: -20).normalized().timeMinutes, 0);
+    expect(const DiarySettings(recallCount: 99).normalized().recallCount, 5);
+    expect(const DiarySettings(recallCount: -3).normalized().recallCount, 0);
 
     await DiaryStore.instance.saveSettings(
-      const DiarySettings(enabled: true, timeMinutes: 8 * 60 + 5),
+      const DiarySettings(
+        enabled: true,
+        timeMinutes: 8 * 60 + 5,
+        recallEnabled: false,
+        recallCount: 4,
+      ),
     );
     await DiaryStore.instance.load();
     expect(DiaryStore.instance.settings.value.enabled, isTrue);
     expect(DiaryStore.instance.settings.value.timeLabel, '08:05');
+    expect(DiaryStore.instance.settings.value.recallEnabled, isFalse);
+    expect(DiaryStore.instance.settings.value.recallCount, 4);
+  });
+
+  test('reads old settings without recall fields', () {
+    final restored = DiarySettings.fromJson({
+      'enabled': true,
+      'timeMinutes': 9 * 60,
+    });
+    expect(restored.enabled, isTrue);
+    expect(restored.recallEnabled, isTrue);
+    expect(restored.recallCount, 2);
   });
 
   test('supports per-character diary overrides', () async {

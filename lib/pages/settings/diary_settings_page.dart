@@ -8,6 +8,7 @@ import 'package:mori_ai/services/diary_service.dart';
 import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/diary_character_settings_sheet.dart';
+import 'package:mori_ai/widgets/number_setting_field.dart';
 
 class DiarySettingsPage extends StatefulWidget {
   const DiarySettingsPage({super.key});
@@ -175,6 +176,46 @@ class _DiarySettingsPageState extends State<DiarySettingsPage> {
                       ),
                       onTap: _pickTime,
                     ),
+                    Divider(
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                      color: colors.outlineVariant,
+                    ),
+                    SwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      secondary: Icon(
+                        Icons.psychology_alt_outlined,
+                        color: colors.primary,
+                      ),
+                      title: const Text('让角色记得最近的日记'),
+                      subtitle: const Text('单聊和主动消息会参考最近写过的日记。'),
+                      value: settings.recallEnabled,
+                      onChanged: (value) {
+                        unawaited(
+                          _save(settings.copyWith(recallEnabled: value)),
+                        );
+                      },
+                    ),
+                    if (settings.recallEnabled)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: NumberSettingField(
+                          label: '召回日记条数',
+                          value: settings.recallCount,
+                          min: 0,
+                          helperText:
+                              '0 表示不注入；最多 ${DiarySettings.maxRecallCount} 条。',
+                          onChanged: (value) {
+                            unawaited(
+                              _save(settings.copyWith(recallCount: value)),
+                            );
+                          },
+                        ),
+                      ),
                   ],
                 ),
               ),

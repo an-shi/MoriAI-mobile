@@ -89,13 +89,22 @@ class DiarySettings {
   const DiarySettings({
     this.enabled = false,
     this.timeMinutes = diaryDefaultTimeMinutes,
+    this.recallEnabled = true,
+    this.recallCount = 2,
     this.characterSettings = const {},
   });
 
   static const defaults = DiarySettings();
+  static const maxRecallCount = 5;
 
   final bool enabled;
   final int timeMinutes;
+
+  /// 是否把最近日记注入单聊和主动消息上下文。
+  final bool recallEnabled;
+
+  /// 每次最多注入几篇日记；0 表示不注入。
+  final int recallCount;
 
   /// 按角色覆盖全局配置；没有记录表示跟随全局。
   final Map<String, DiaryCharacterSettings> characterSettings;
@@ -157,6 +166,8 @@ class DiarySettings {
     return DiarySettings(
       enabled: enabled,
       timeMinutes: timeMinutes.clamp(0, 24 * 60 - 1).toInt(),
+      recallEnabled: recallEnabled,
+      recallCount: recallCount.clamp(0, maxRecallCount).toInt(),
       characterSettings: Map<String, DiaryCharacterSettings>.unmodifiable(
         normalizedCharacters,
       ),
@@ -166,11 +177,15 @@ class DiarySettings {
   DiarySettings copyWith({
     bool? enabled,
     int? timeMinutes,
+    bool? recallEnabled,
+    int? recallCount,
     Map<String, DiaryCharacterSettings>? characterSettings,
   }) {
     return DiarySettings(
       enabled: enabled ?? this.enabled,
       timeMinutes: timeMinutes ?? this.timeMinutes,
+      recallEnabled: recallEnabled ?? this.recallEnabled,
+      recallCount: recallCount ?? this.recallCount,
       characterSettings: characterSettings ?? this.characterSettings,
     ).normalized();
   }
@@ -178,6 +193,8 @@ class DiarySettings {
   Map<String, dynamic> toJson() => {
     'enabled': enabled,
     'timeMinutes': timeMinutes,
+    'recallEnabled': recallEnabled,
+    'recallCount': recallCount,
     'characters': {
       for (final entry in characterSettings.entries)
         entry.key: entry.value.toJson(),
@@ -187,6 +204,8 @@ class DiarySettings {
   factory DiarySettings.fromJson(Map<String, dynamic> json) {
     final rawEnabled = json['enabled'];
     final rawTime = json['timeMinutes'];
+    final rawRecallEnabled = json['recallEnabled'];
+    final rawRecallCount = json['recallCount'];
     final characters = <String, DiaryCharacterSettings>{};
     final rawCharacters = json['characters'];
     if (rawCharacters is Map) {
@@ -210,6 +229,12 @@ class DiarySettings {
     return DiarySettings(
       enabled: rawEnabled is bool ? rawEnabled : defaults.enabled,
       timeMinutes: rawTime is int ? rawTime : defaults.timeMinutes,
+      recallEnabled: rawRecallEnabled is bool
+          ? rawRecallEnabled
+          : defaults.recallEnabled,
+      recallCount: rawRecallCount is int
+          ? rawRecallCount
+          : defaults.recallCount,
       characterSettings: characters,
     ).normalized();
   }

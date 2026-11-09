@@ -9,6 +9,7 @@ import 'package:mori_ai/models/character_activity.dart';
 import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/chat_burst_settings.dart';
 import 'package:mori_ai/models/chat_message.dart';
+import 'package:mori_ai/models/diary.dart';
 import 'package:mori_ai/models/memory.dart';
 import 'package:mori_ai/models/model_option.dart';
 import 'package:mori_ai/models/model_settings.dart';
@@ -18,6 +19,7 @@ import 'package:mori_ai/services/character_activity_store.dart';
 import 'package:mori_ai/services/chat_burst_settings_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
+import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/mood_store.dart';
@@ -32,6 +34,7 @@ void main() {
     await ChatBurstSettingsStore.instance.load();
     await CharacterActivityStore.instance.load();
     await MoodStore.instance.load();
+    await DiaryStore.instance.load();
     await MemoryStore.instance.load();
     ApiKeyStore.instance.keyFor(ModelProviderCatalog.defaultProviderId).value =
         'test-key';
@@ -45,6 +48,7 @@ void main() {
     await ChatBurstSettingsStore.instance.load();
     await CharacterActivityStore.instance.load();
     await MoodStore.instance.load();
+    await DiaryStore.instance.load();
     await MemoryStore.instance.load();
   });
 
@@ -408,6 +412,26 @@ void main() {
 
     expect(requestBodies.single, contains('用户喜欢在睡前喝热牛奶'));
     expect(requestBodies.single, contains('长期记得'));
+  });
+
+  testWidgets('injects recent diary context into chat prompt', (tester) async {
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    await DiaryStore.instance.saveEntry(
+      DiaryEntry(
+        id: 'diary_mori_${diaryDateKey(yesterday)}',
+        characterId: CharacterProfile.presetMoriId,
+        dateKey: diaryDateKey(yesterday),
+        content: '昨天和用户一起看了很晚的电影。',
+        createdAtMs: yesterday.millisecondsSinceEpoch,
+        moodLabel: '心情不错',
+      ),
+    );
+    final requestBodies = <String>[];
+    await _prepareBurstTest(tester, '第一句', requestBodies: requestBodies);
+
+    expect(requestBodies.single, contains('最近写过的私人日记'));
+    expect(requestBodies.single, contains('昨天和用户一起看了很晚的电影。'));
+    expect(requestBodies.single, contains('心情不错'));
   });
 
   testWidgets('observes mood changes from the user message', (tester) async {

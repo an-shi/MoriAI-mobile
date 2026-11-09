@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:mori_ai/config/model_providers.dart';
 import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/chat_message.dart';
+import 'package:mori_ai/models/diary.dart';
 import 'package:mori_ai/models/memory.dart';
 import 'package:mori_ai/models/model_option.dart';
 import 'package:mori_ai/models/model_settings.dart';
@@ -17,6 +18,7 @@ import 'package:mori_ai/services/character_activity_store.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
+import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
@@ -32,6 +34,7 @@ void main() {
     await ProactiveMessageStore.instance.load();
     await CharacterActivityStore.instance.load();
     await MemoryStore.instance.load();
+    await DiaryStore.instance.load();
     await ModelStore.instance.saveModels(
       ModelProviderCatalog.defaultProviderId,
       const [
@@ -61,6 +64,7 @@ void main() {
     await ProactiveMessageStore.instance.load();
     await CharacterActivityStore.instance.load();
     await MemoryStore.instance.load();
+    await DiaryStore.instance.load();
   });
 
   test('manual trigger appends cleaned proactive bubbles', () async {
@@ -163,6 +167,53 @@ void main() {
 
     expect(requestBody, contains('用户喜欢在睡前喝热牛奶'));
     expect(requestBody, contains('长期记得'));
+  });
+
+  test('manual trigger injects recent diary context', () async {
+    late String requestBody;
+    final client = MockClient.streaming((request, bodyStream) async {
+      requestBody = utf8.decode(await bodyStream.toBytes());
+      const sse =
+          'data: {"choices":[{"delta":{"content":"晚上好呀"}}]}\n'
+          'data: [DONE]\n';
+      return http.StreamedResponse(
+        Stream.value(utf8.encode(sse)),
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      );
+    });
+    final chatService = ChatService(client: client);
+    addTearDown(chatService.dispose);
+    final service = ProactiveMessageService.test(
+      chatService: chatService,
+      random: Random(1),
+    );
+
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    await DiaryStore.instance.saveEntry(
+      DiaryEntry(
+        id: 'diary_mori_${diaryDateKey(yesterday)}',
+        characterId: CharacterProfile.presetMoriId,
+        dateKey: diaryDateKey(yesterday),
+        content: '昨天用户说最近工作有点累。',
+        createdAtMs: yesterday.millisecondsSinceEpoch,
+        moodLabel: '有点低落',
+      ),
+    );
+    await ChatHistoryStore.instance.saveFor(CharacterProfile.presetMoriId, [
+      ChatMessage(
+        id: 'user_diary',
+        role: ChatRole.user,
+        content: '今天也加班到很晚。',
+        createdAt: DateTime(2026, 11, 8, 21),
+      ),
+    ]);
+
+    await service.triggerNow(CharacterProfile.presetMoriId);
+
+    expect(requestBody, contains('最近写过的私人日记'));
+    expect(requestBody, contains('昨天用户说最近工作有点累。'));
+    expect(requestBody, contains('有点低落'));
   });
 
   test('manual trigger reports missing model configuration', () async {
