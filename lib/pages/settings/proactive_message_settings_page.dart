@@ -258,16 +258,40 @@ class _ProactiveMessageSettingsPageState
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
-            child: SwitchListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 4,
-              ),
-              title: const Text('启用自动消息'),
-              subtitle: const Text('开启后，所有单聊角色都可能主动发消息'),
-              value: _settings.enabled,
-              onChanged: (value) =>
-                  _updateAndSave(_settings.copyWith(enabled: value)),
+            child: Column(
+              children: [
+                SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  title: const Text('启用自动消息'),
+                  subtitle: const Text('开启后，所有单聊角色都可能主动发消息'),
+                  value: _settings.enabled,
+                  onChanged: (value) =>
+                      _updateAndSave(_settings.copyWith(enabled: value)),
+                ),
+                Divider(
+                  height: 1,
+                  indent: 16,
+                  endIndent: 16,
+                  color: colors.outlineVariant,
+                ),
+                SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  title: const Text('本地通知'),
+                  subtitle: const Text('角色主动发消息时发送系统通知，并在会话列表显示未读红点'),
+                  value: _settings.notificationsEnabled,
+                  onChanged: _settings.enabled
+                      ? (value) => _updateAndSave(
+                          _settings.copyWith(notificationsEnabled: value),
+                        )
+                      : null,
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),

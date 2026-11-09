@@ -8,6 +8,7 @@ import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/group_store.dart';
 import 'package:mori_ai/services/pinned_conversation_store.dart';
+import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/group_avatar.dart';
 
@@ -38,6 +39,7 @@ class _ChatListPageState extends State<ChatListPage> {
     ChatHistoryStore.instance.messageAppended.addListener(
       _handleHistoryAppended,
     );
+    UnreadStore.instance.counts.addListener(_handleUnreadChanged);
     _loadSummaries();
   }
 
@@ -51,7 +53,14 @@ class _ChatListPageState extends State<ChatListPage> {
     ChatHistoryStore.instance.messageAppended.removeListener(
       _handleHistoryAppended,
     );
+    UnreadStore.instance.counts.removeListener(_handleUnreadChanged);
     super.dispose();
+  }
+
+  void _handleUnreadChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _handlePinnedChanged() {
@@ -294,6 +303,7 @@ class _ChatListPageState extends State<ChatListPage> {
                   ? '${entry.group!.memberIds.length} 位成员'
                   : '暂无消息');
           final isPinned = pinnedIds.contains(entry.id);
+          final unread = UnreadStore.instance.countFor(entry.id);
 
           return Builder(
             builder: (tileContext) {
@@ -320,6 +330,10 @@ class _ChatListPageState extends State<ChatListPage> {
                         ),
                       ),
                     ),
+                    if (unread > 0) ...[
+                      const SizedBox(width: 8),
+                      Badge(label: Text(unread > 99 ? '99+' : '$unread')),
+                    ],
                     if (timeLabel != null) ...[
                       const SizedBox(width: 8),
                       Text(

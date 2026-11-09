@@ -23,6 +23,7 @@ import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
+import 'package:mori_ai/services/unread_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -35,6 +36,7 @@ void main() {
     await CharacterActivityStore.instance.load();
     await MemoryStore.instance.load();
     await DiaryStore.instance.load();
+    await UnreadStore.instance.load();
     await ModelStore.instance.saveModels(
       ModelProviderCatalog.defaultProviderId,
       const [
@@ -65,6 +67,7 @@ void main() {
     await CharacterActivityStore.instance.load();
     await MemoryStore.instance.load();
     await DiaryStore.instance.load();
+    await UnreadStore.instance.load();
   });
 
   test('manual trigger appends cleaned proactive bubbles', () async {
@@ -120,6 +123,7 @@ void main() {
       CharacterProfile.presetMoriId,
     );
     expect(state?.lastProactiveAtMs, greaterThan(0));
+    expect(UnreadStore.instance.countFor(CharacterProfile.presetMoriId), 2);
   });
 
   test('manual trigger injects relevant memories', () async {

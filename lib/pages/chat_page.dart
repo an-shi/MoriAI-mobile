@@ -9,6 +9,7 @@ import 'package:mori_ai/models/chat_burst_settings.dart';
 import 'package:mori_ai/models/chat_message.dart';
 import 'package:mori_ai/models/group_profile.dart';
 import 'package:mori_ai/services/api_key_store.dart';
+import 'package:mori_ai/services/active_conversation_store.dart';
 import 'package:mori_ai/services/character_activity_context_builder.dart';
 import 'package:mori_ai/services/character_activity_recorder.dart';
 import 'package:mori_ai/services/character_store.dart';
@@ -21,6 +22,7 @@ import 'package:mori_ai/services/memory_context_builder.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
+import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
 import 'package:mori_ai/utils/chat_bubble_utils.dart';
 import 'package:mori_ai/utils/chat_queue_utils.dart';
@@ -124,6 +126,12 @@ class _ChatPageState extends State<ChatPage> {
     ChatHistoryStore.instance.messageAppended.addListener(
       _handleExternalMessages,
     );
+    ActiveConversationStore.instance.enter(_conversationId);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(UnreadStore.instance.markRead(_conversationId));
+      }
+    });
     _loadHistory(_conversationId);
   }
 
@@ -143,6 +151,7 @@ class _ChatPageState extends State<ChatPage> {
       _conversationId,
       false,
     );
+    ActiveConversationStore.instance.leave(_conversationId);
     _inputController
       ..removeListener(_handleInputChanged)
       ..dispose();
@@ -312,6 +321,7 @@ class _ChatPageState extends State<ChatPage> {
     }
 
     setState(() => _messages.addAll(additions));
+    unawaited(UnreadStore.instance.markRead(_conversationId));
     _scrollToLatest(animate: true);
   }
 

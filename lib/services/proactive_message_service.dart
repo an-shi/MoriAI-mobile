@@ -9,17 +9,20 @@ import 'package:mori_ai/models/chat_message.dart';
 import 'package:mori_ai/models/proactive_message_settings.dart';
 import 'package:mori_ai/models/proactive_message_state.dart';
 import 'package:mori_ai/services/api_key_store.dart';
+import 'package:mori_ai/services/active_conversation_store.dart';
 import 'package:mori_ai/services/character_activity_context_builder.dart';
 import 'package:mori_ai/services/character_activity_recorder.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/diary_context_builder.dart';
+import 'package:mori_ai/services/local_notification_service.dart';
 import 'package:mori_ai/services/memory_context_builder.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
+import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/utils/chat_bubble_utils.dart';
 import 'package:mori_ai/utils/chat_text_utils.dart';
 
@@ -700,6 +703,23 @@ class ProactiveMessageService with WidgetsBindingObserver {
         ...bubbles,
       ]);
       ChatHistoryStore.instance.notifyExternalMessages(conversationId, bubbles);
+      if (!ActiveConversationStore.instance.isActive(conversationId)) {
+        final proactiveSettings = ProactiveMessageStore.instance.settings.value;
+        unawaited(
+          UnreadStore.instance.markUnread(
+            conversationId,
+            count: bubbles.length,
+          ),
+        );
+        unawaited(
+          LocalNotificationService.instance.showProactive(
+            conversationId: conversationId,
+            characterName: character.displayName,
+            body: bubbles.last.content,
+            settings: proactiveSettings,
+          ),
+        );
+      }
       unawaited(
         CharacterActivityRecorder.recordProactiveMessages(
           character: character,

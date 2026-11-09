@@ -12,6 +12,7 @@ import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:mori_ai/services/pinned_conversation_store.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
+import 'package:mori_ai/services/unread_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 管理多张角色卡以及卡片内容。
@@ -169,6 +170,7 @@ class CharacterStore {
     await MomentStore.instance.deleteForCharacter(cardId);
     await _deleteGroupMessages(cardId);
     await ProactiveMessageStore.instance.deleteState(cardId);
+    await UnreadStore.instance.clearForConversation(cardId);
     await CharacterActivityStore.instance.clearForCharacter(cardId);
     await DiaryStore.instance.clearForCharacter(cardId);
     await MemoryStore.instance.clearForCharacter(cardId);

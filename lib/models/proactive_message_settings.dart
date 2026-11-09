@@ -8,6 +8,7 @@ class ProactiveMessageSettings {
     this.dailyLimit = 6,
     this.maxUnanswered = 3,
     this.nudgeEnabled = true,
+    this.notificationsEnabled = true,
     this.quietHoursEnabled = true,
     this.quietStartMinutes = 23 * 60 + 30,
     this.quietEndMinutes = 7 * 60,
@@ -27,6 +28,7 @@ class ProactiveMessageSettings {
   final int dailyLimit;
   final int maxUnanswered;
   final bool nudgeEnabled;
+  final bool notificationsEnabled;
   final bool quietHoursEnabled;
   final int quietStartMinutes;
   final int quietEndMinutes;
@@ -105,6 +107,7 @@ class ProactiveMessageSettings {
       dailyLimit: _normalizeLimit(dailyLimit),
       maxUnanswered: _normalizeLimit(maxUnanswered),
       nudgeEnabled: nudgeEnabled,
+      notificationsEnabled: notificationsEnabled,
       quietHoursEnabled: quietHoursEnabled,
       quietStartMinutes: quietStartMinutes.clamp(0, 24 * 60 - 1),
       quietEndMinutes: quietEndMinutes.clamp(0, 24 * 60 - 1),
@@ -128,6 +131,7 @@ class ProactiveMessageSettings {
     int? dailyLimit,
     int? maxUnanswered,
     bool? nudgeEnabled,
+    bool? notificationsEnabled,
     bool? quietHoursEnabled,
     int? quietStartMinutes,
     int? quietEndMinutes,
@@ -142,6 +146,7 @@ class ProactiveMessageSettings {
       dailyLimit: dailyLimit ?? this.dailyLimit,
       maxUnanswered: maxUnanswered ?? this.maxUnanswered,
       nudgeEnabled: nudgeEnabled ?? this.nudgeEnabled,
+      notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
       quietHoursEnabled: quietHoursEnabled ?? this.quietHoursEnabled,
       quietStartMinutes: quietStartMinutes ?? this.quietStartMinutes,
       quietEndMinutes: quietEndMinutes ?? this.quietEndMinutes,
@@ -158,6 +163,7 @@ class ProactiveMessageSettings {
     'dailyLimit': dailyLimit,
     'maxUnanswered': maxUnanswered,
     'nudgeEnabled': nudgeEnabled,
+    'notificationsEnabled': notificationsEnabled,
     'quietHoursEnabled': quietHoursEnabled,
     'quietStartMinutes': quietStartMinutes,
     'quietEndMinutes': quietEndMinutes,
@@ -198,6 +204,10 @@ class ProactiveMessageSettings {
       dailyLimit: readInt('dailyLimit', defaults.dailyLimit),
       maxUnanswered: readInt('maxUnanswered', defaults.maxUnanswered),
       nudgeEnabled: readBool('nudgeEnabled', defaults.nudgeEnabled),
+      notificationsEnabled: readBool(
+        'notificationsEnabled',
+        defaults.notificationsEnabled,
+      ),
       quietHoursEnabled: readBool(
         'quietHoursEnabled',
         defaults.quietHoursEnabled,

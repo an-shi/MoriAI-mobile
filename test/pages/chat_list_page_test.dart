@@ -7,6 +7,7 @@ import 'package:mori_ai/pages/chat_list_page.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/pinned_conversation_store.dart';
+import 'package:mori_ai/services/unread_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -16,12 +17,14 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await CharacterStore.instance.load();
     await PinnedConversationStore.instance.load();
+    await UnreadStore.instance.load();
   });
 
   tearDown(() async {
     SharedPreferences.setMockInitialValues({});
     await CharacterStore.instance.load();
     await PinnedConversationStore.instance.load();
+    await UnreadStore.instance.load();
   });
 
   testWidgets('lists conversations and opens the selected chat', (
@@ -58,6 +61,13 @@ void main() {
     expect(find.text('小森'), findsOneWidget);
     expect(find.text('Mori 的历史消息'), findsOneWidget);
     expect(find.text('小森的最新消息'), findsOneWidget);
+
+    await UnreadStore.instance.markUnread(
+      CharacterProfile.presetMoriId,
+      count: 2,
+    );
+    await tester.pump();
+    expect(find.text('2'), findsOneWidget);
 
     final xiaosenTop = tester.getTopLeft(find.text('小森')).dy;
     final moriTop = tester.getTopLeft(find.text('Mori')).dy;

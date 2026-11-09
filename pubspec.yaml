@@ -41,6 +41,7 @@ dependencies:
   shared_preferences: ^2.5.6
   image_picker: ^1.2.4
   path_provider: ^2.1.6
+  flutter_local_notifications: ^23.0.0
 
 dependency_overrides:
   # 当前依赖镜像缺少该 iOS 实现包，改从官方 pub.dev 获取。

@@ -20,6 +20,10 @@ void main() {
   test('loads disabled defaults and persists settings', () async {
     expect(ProactiveMessageStore.instance.settings.value.enabled, isFalse);
     expect(ProactiveMessageStore.instance.settings.value.nudgeEnabled, isTrue);
+    expect(
+      ProactiveMessageStore.instance.settings.value.notificationsEnabled,
+      isTrue,
+    );
     expect(ProactiveMessageStore.instance.settings.value.scheduledTimes, [
       '08:30',
       '22:30',
@@ -31,6 +35,7 @@ void main() {
         silenceMinMinutes: 45,
         silenceMaxMinutes: 120,
         nudgeEnabled: false,
+        notificationsEnabled: false,
         scheduledTimes: ['09:15', '23:00'],
       ),
     );
@@ -41,6 +46,7 @@ void main() {
     expect(loaded.silenceMinMinutes, 45);
     expect(loaded.silenceMaxMinutes, 120);
     expect(loaded.nudgeEnabled, isFalse);
+    expect(loaded.notificationsEnabled, isFalse);
     expect(loaded.scheduledTimes, ['09:15', '23:00']);
   });
 

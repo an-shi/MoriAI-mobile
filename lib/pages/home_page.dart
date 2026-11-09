@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mori_ai/models/group_profile.dart';
 import 'package:mori_ai/models/user_profile.dart';
+import 'package:mori_ai/pages/chat_detail_page.dart';
 import 'package:mori_ai/pages/chat_list_page.dart';
 import 'package:mori_ai/pages/group/group_chat_detail_page.dart';
 import 'package:mori_ai/pages/group/new_group_chat_page.dart';
@@ -8,6 +9,9 @@ import 'package:mori_ai/pages/memory_page.dart';
 import 'package:mori_ai/pages/moments_page.dart';
 import 'package:mori_ai/pages/profile/personal_settings_page.dart';
 import 'package:mori_ai/pages/settings_page.dart';
+import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/services/local_notification_service.dart';
+import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
 import 'package:mori_ai/widgets/user_avatar.dart';
 import 'package:mori_ai/widgets/user_profile_drawer.dart';
@@ -28,6 +32,58 @@ class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
 
   bool get _isChatTab => _currentIndex == 0;
+
+  bool _openingNotification = false;
+
+  @override
+  void initState() {
+    super.initState();
+    UnreadStore.instance.counts.addListener(_handleUnreadChanged);
+    LocalNotificationService.instance.pendingConversationId.addListener(
+      _handleNotificationNavigation,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _handleNotificationNavigation();
+    });
+  }
+
+  @override
+  void dispose() {
+    UnreadStore.instance.counts.removeListener(_handleUnreadChanged);
+    LocalNotificationService.instance.pendingConversationId.removeListener(
+      _handleNotificationNavigation,
+    );
+    super.dispose();
+  }
+
+  void _handleUnreadChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _handleNotificationNavigation() async {
+    if (_openingNotification) {
+      return;
+    }
+    final conversationId =
+        LocalNotificationService.instance.pendingConversationId.value;
+    if (conversationId == null || conversationId.isEmpty) {
+      return;
+    }
+    LocalNotificationService.instance.pendingConversationId.value = null;
+    if (!mounted || CharacterStore.instance.cardById(conversationId) == null) {
+      return;
+    }
+    _openingNotification = true;
+    setState(() => _currentIndex = 0);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChatDetailPage(characterId: conversationId),
+      ),
+    );
+    _openingNotification = false;
+  }
 
   Future<void> _openDrawerPage(Widget page) async {
     Navigator.of(context).pop();
@@ -122,6 +178,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final unread = UnreadStore.instance.totalCount;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -149,18 +206,26 @@ class _HomePageState extends State<HomePage> {
                 }
                 setState(() => _currentIndex = index);
               },
-              destinations: const [
+              destinations: [
                 NavigationDestination(
-                  icon: Icon(Icons.chat_bubble_outline_rounded),
-                  selectedIcon: Icon(Icons.chat_bubble_rounded),
+                  icon: Badge(
+                    isLabelVisible: unread > 0,
+                    label: Text(unread > 99 ? '99+' : '$unread'),
+                    child: const Icon(Icons.chat_bubble_outline_rounded),
+                  ),
+                  selectedIcon: Badge(
+                    isLabelVisible: unread > 0,
+                    label: Text(unread > 99 ? '99+' : '$unread'),
+                    child: const Icon(Icons.chat_bubble_rounded),
+                  ),
                   label: '对话',
                 ),
-                NavigationDestination(
+                const NavigationDestination(
                   icon: Icon(Icons.auto_stories_outlined),
                   selectedIcon: Icon(Icons.auto_stories_rounded),
                   label: '记忆与角色卡',
                 ),
-                NavigationDestination(
+                const NavigationDestination(
                   icon: Icon(Icons.dynamic_feed_outlined),
                   selectedIcon: Icon(Icons.dynamic_feed_rounded),
                   label: '动态',

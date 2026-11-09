@@ -15,6 +15,7 @@ import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
+import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/diary_character_settings_sheet.dart';
 import 'package:mori_ai/widgets/number_setting_field.dart';
@@ -64,6 +65,7 @@ class CharacterChatSettingsPage extends StatelessWidget {
     try {
       await ChatHistoryStore.instance.deleteConversation(characterId);
       await ChatQueueStore.instance.saveFor(characterId, const []);
+      await UnreadStore.instance.clearForConversation(characterId);
       if (context.mounted) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()

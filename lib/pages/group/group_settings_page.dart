@@ -9,6 +9,7 @@ import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_queue_store.dart';
 import 'package:mori_ai/services/group_store.dart';
+import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/pages/group/group_memory_page.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/group_avatar.dart';
@@ -214,6 +215,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
     try {
       await ChatHistoryStore.instance.deleteConversation(widget.groupId);
       await ChatQueueStore.instance.saveFor(widget.groupId, const []);
+      await UnreadStore.instance.clearForConversation(widget.groupId);
       if (mounted) {
         _showSnackBar('聊天记录已删除');
       }

@@ -23,6 +23,7 @@ import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/mood_store.dart';
+import 'package:mori_ai/services/unread_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -36,6 +37,7 @@ void main() {
     await MoodStore.instance.load();
     await DiaryStore.instance.load();
     await MemoryStore.instance.load();
+    await UnreadStore.instance.load();
     ApiKeyStore.instance.keyFor(ModelProviderCatalog.defaultProviderId).value =
         'test-key';
   });
@@ -50,6 +52,7 @@ void main() {
     await MoodStore.instance.load();
     await DiaryStore.instance.load();
     await MemoryStore.instance.load();
+    await UnreadStore.instance.load();
   });
 
   testWidgets('shows the image button only for vision-capable models', (
@@ -117,6 +120,24 @@ void main() {
 
     expect(find.text('这是上次的聊天记录'), findsOneWidget);
     expect(find.text('发消息…'), findsOneWidget);
+  });
+
+  testWidgets('marks the conversation read when opened', (tester) async {
+    await UnreadStore.instance.markUnread(
+      CharacterProfile.presetMoriId,
+      count: 2,
+    );
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ChatPage(characterId: CharacterProfile.presetMoriId),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(UnreadStore.instance.countFor(CharacterProfile.presetMoriId), 0);
   });
 
   testWidgets('appends externally generated messages', (tester) async {

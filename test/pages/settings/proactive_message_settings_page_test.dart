@@ -30,6 +30,7 @@ void main() {
 
     expect(find.text('自动消息'), findsOneWidget);
     expect(find.text('启用自动消息'), findsOneWidget);
+    expect(find.text('本地通知'), findsOneWidget);
     expect(find.text('运行诊断'), findsOneWidget);
     expect(find.text('08:30'), findsOneWidget);
     expect(find.text('22:30'), findsOneWidget);
@@ -39,6 +40,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(ProactiveMessageStore.instance.settings.value.enabled, isTrue);
+    expect(
+      ProactiveMessageStore.instance.settings.value.notificationsEnabled,
+      isTrue,
+    );
+
+    await tester.tap(find.text('本地通知'));
+    await tester.pumpAndSettle();
+    expect(
+      ProactiveMessageStore.instance.settings.value.notificationsEnabled,
+      isFalse,
+    );
 
     await tester.ensureVisible(find.text('恢复默认设置'));
     await tester.pumpAndSettle();

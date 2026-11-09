@@ -12,6 +12,7 @@ import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/group_memory_service.dart';
 import 'package:mori_ai/services/group_memory_store.dart';
 import 'package:mori_ai/services/group_store.dart';
+import 'package:mori_ai/services/local_notification_service.dart';
 import 'package:mori_ai/services/memory_service.dart';
 import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/model_store.dart';
@@ -22,6 +23,7 @@ import 'package:mori_ai/services/pinned_conversation_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
 import 'package:mori_ai/services/theme_store.dart';
+import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
 
 Future<void> main() async {
@@ -44,8 +46,10 @@ Future<void> main() async {
     MemoryStore.instance.load(),
     AvatarStore.instance.load(),
     ThemeStore.instance.load(),
+    UnreadStore.instance.load(),
   ]);
   await CharacterActivityBackfill.instance.ensureBackfilled();
+  await LocalNotificationService.instance.init();
   runApp(const MoriApp());
   ProactiveMessageService.instance.start();
   DiaryService.instance.start();

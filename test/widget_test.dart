@@ -6,6 +6,7 @@ import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/group_store.dart';
 import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
+import 'package:mori_ai/services/unread_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -16,6 +17,7 @@ void main() {
     await MomentStore.instance.load();
     await DiaryStore.instance.load();
     await MemoryStore.instance.load();
+    await UnreadStore.instance.load();
   });
 
   tearDown(() async {
@@ -25,6 +27,7 @@ void main() {
     await MomentStore.instance.load();
     await DiaryStore.instance.load();
     await MemoryStore.instance.load();
+    await UnreadStore.instance.load();
   });
 
   testWidgets('bottom navigation switches between pages', (tester) async {
@@ -44,6 +47,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('最新动态'), findsOneWidget);
     expect(find.text('还没有动态'), findsOneWidget);
+  });
+
+  testWidgets('shows unread badge on the chat tab and conversation', (
+    tester,
+  ) async {
+    await UnreadStore.instance.markUnread('mori', count: 2);
+    await tester.pumpWidget(const MoriApp());
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('2')),
+      findsOneWidget,
+    );
+    expect(find.text('2'), findsWidgets);
   });
 
   testWidgets('user profile is on the left and add menu is on the right', (
