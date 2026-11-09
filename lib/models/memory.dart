@@ -220,6 +220,264 @@ class MemoryEntry {
   }
 }
 
+class MemoryProfile {
+  const MemoryProfile({
+    this.characterId = '',
+    this.summary = '',
+    this.preferences = '',
+    this.recentFocus = '',
+    this.importantDates = const [],
+    this.updatedAtMs = 0,
+  });
+
+  static const maxFieldLength = 300;
+  static const maxImportantDates = 5;
+  static const maxDateLength = 40;
+
+  final String characterId;
+
+  /// 对方是谁、身份以及和角色的关系。
+  final String summary;
+
+  /// 稳定喜好、不喜欢和习惯。
+  final String preferences;
+
+  /// 最近的重要状态、计划或正在忙的事。
+  final String recentFocus;
+
+  /// 重要日期或约定，例如生日、纪念日、约好的时间。
+  final List<String> importantDates;
+
+  final int updatedAtMs;
+
+  bool get isEmpty =>
+      summary.trim().isEmpty &&
+      preferences.trim().isEmpty &&
+      recentFocus.trim().isEmpty &&
+      importantDates.isEmpty;
+
+  bool get isNotEmpty => !isEmpty;
+
+  String get searchText => [
+    summary,
+    preferences,
+    recentFocus,
+    ...importantDates,
+  ].where((part) => part.trim().isNotEmpty).join(' ');
+
+  MemoryProfile normalized() {
+    String clip(String value) {
+      final trimmed = value.trim();
+      return trimmed.length > maxFieldLength
+          ? trimmed.substring(0, maxFieldLength)
+          : trimmed;
+    }
+
+    final dates = <String>[];
+    for (final raw in importantDates) {
+      final date = raw.trim();
+      if (date.isEmpty || dates.contains(date)) {
+        continue;
+      }
+      dates.add(
+        date.length > maxDateLength ? date.substring(0, maxDateLength) : date,
+      );
+      if (dates.length >= maxImportantDates) {
+        break;
+      }
+    }
+    return MemoryProfile(
+      characterId: characterId.trim(),
+      summary: clip(summary),
+      preferences: clip(preferences),
+      recentFocus: clip(recentFocus),
+      importantDates: List<String>.unmodifiable(dates),
+      updatedAtMs: updatedAtMs < 0 ? 0 : updatedAtMs,
+    );
+  }
+
+  MemoryProfile copyWith({
+    String? characterId,
+    String? summary,
+    String? preferences,
+    String? recentFocus,
+    List<String>? importantDates,
+    int? updatedAtMs,
+  }) {
+    return MemoryProfile(
+      characterId: characterId ?? this.characterId,
+      summary: summary ?? this.summary,
+      preferences: preferences ?? this.preferences,
+      recentFocus: recentFocus ?? this.recentFocus,
+      importantDates: importantDates ?? this.importantDates,
+      updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+    ).normalized();
+  }
+
+  List<String> toContextLines() {
+    return [
+      if (summary.trim().isNotEmpty) '- 对方是谁：${summary.trim()}',
+      if (preferences.trim().isNotEmpty) '- 稳定喜好：${preferences.trim()}',
+      if (recentFocus.trim().isNotEmpty) '- 最近状态：${recentFocus.trim()}',
+      if (importantDates.isNotEmpty) '- 重要日期：${importantDates.join('、')}',
+    ];
+  }
+
+  Map<String, dynamic> toJson() => {
+    'characterId': characterId,
+    'summary': summary,
+    'preferences': preferences,
+    'recentFocus': recentFocus,
+    'importantDates': importantDates,
+    'updatedAtMs': updatedAtMs,
+  };
+
+  factory MemoryProfile.fromJson(Map<String, dynamic> json) {
+    String readString(String key) {
+      final value = json[key];
+      return value is String ? value : '';
+    }
+
+    final rawDates = json['importantDates'];
+    return MemoryProfile(
+      characterId: readString('characterId'),
+      summary: readString('summary'),
+      preferences: readString('preferences'),
+      recentFocus: readString('recentFocus'),
+      importantDates: [
+        if (rawDates is List)
+          for (final date in rawDates)
+            if (date is String) date,
+      ],
+      updatedAtMs: json['updatedAtMs'] is int ? json['updatedAtMs'] as int : 0,
+    ).normalized();
+  }
+}
+
+enum MemoryOpenTopicStatus { open, resolved }
+
+extension MemoryOpenTopicStatusLabel on MemoryOpenTopicStatus {
+  String get label => switch (this) {
+    MemoryOpenTopicStatus.open => '待跟进',
+    MemoryOpenTopicStatus.resolved => '已解决',
+  };
+}
+
+class MemoryOpenTopic {
+  const MemoryOpenTopic({
+    required this.id,
+    required this.characterId,
+    required this.text,
+    this.status = MemoryOpenTopicStatus.open,
+    this.importance = 0.6,
+    this.createdAtMs = 0,
+    this.updatedAtMs = 0,
+    this.resolvedAtMs = 0,
+  });
+
+  static const maxTextLength = 200;
+
+  final String id;
+  final String characterId;
+  final String text;
+  final MemoryOpenTopicStatus status;
+  final double importance;
+  final int createdAtMs;
+  final int updatedAtMs;
+  final int resolvedAtMs;
+
+  bool get isOpen => status == MemoryOpenTopicStatus.open;
+
+  String get statusLabel => status.label;
+
+  DateTime get updatedAt => DateTime.fromMillisecondsSinceEpoch(updatedAtMs);
+
+  MemoryOpenTopic normalized() {
+    final trimmed = text.trim();
+    final created = createdAtMs < 0 ? 0 : createdAtMs;
+    final updated = updatedAtMs < created ? created : updatedAtMs;
+    return MemoryOpenTopic(
+      id: id.trim(),
+      characterId: characterId.trim(),
+      text: trimmed.length > maxTextLength
+          ? trimmed.substring(0, maxTextLength)
+          : trimmed,
+      status: status,
+      importance: importance.clamp(0, 1).toDouble(),
+      createdAtMs: created,
+      updatedAtMs: updated,
+      resolvedAtMs: resolvedAtMs < 0 ? 0 : resolvedAtMs,
+    );
+  }
+
+  MemoryOpenTopic copyWith({
+    String? id,
+    String? characterId,
+    String? text,
+    MemoryOpenTopicStatus? status,
+    double? importance,
+    int? createdAtMs,
+    int? updatedAtMs,
+    int? resolvedAtMs,
+  }) {
+    return MemoryOpenTopic(
+      id: id ?? this.id,
+      characterId: characterId ?? this.characterId,
+      text: text ?? this.text,
+      status: status ?? this.status,
+      importance: importance ?? this.importance,
+      createdAtMs: createdAtMs ?? this.createdAtMs,
+      updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      resolvedAtMs: resolvedAtMs ?? this.resolvedAtMs,
+    ).normalized();
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'characterId': characterId,
+    'text': text,
+    'status': status.name,
+    'importance': importance,
+    'createdAtMs': createdAtMs,
+    'updatedAtMs': updatedAtMs,
+    'resolvedAtMs': resolvedAtMs,
+  };
+
+  factory MemoryOpenTopic.fromJson(Map<String, dynamic> json) {
+    String readString(String key) {
+      final value = json[key];
+      return value is String ? value : '';
+    }
+
+    int readInt(String key) {
+      final value = json[key];
+      return value is int ? value : 0;
+    }
+
+    MemoryOpenTopicStatus readStatus(Object? raw) {
+      for (final status in MemoryOpenTopicStatus.values) {
+        if (status.name == raw) {
+          return status;
+        }
+      }
+      return MemoryOpenTopicStatus.open;
+    }
+
+    return MemoryOpenTopic(
+      id: readString('id'),
+      characterId: readString('characterId'),
+      text: readString('text'),
+      status: readStatus(json['status']),
+      importance: json['importance'] is num
+          ? (json['importance'] as num).toDouble()
+          : 0.6,
+      createdAtMs: readInt('createdAtMs'),
+      updatedAtMs: readInt('updatedAtMs'),
+      resolvedAtMs: readInt('resolvedAtMs'),
+    ).normalized();
+  }
+}
+
 class MemorySettings {
   const MemorySettings({
     this.enabled = true,

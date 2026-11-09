@@ -12,6 +12,9 @@ class MemoryStore {
   static const _settingsKey = 'memory_settings_v1';
   static const _entriesKey = 'character_memory_v1';
   static const _statesKey = 'memory_state_v1';
+  static const _profilesKey = 'character_memory_profile_v1';
+  static const _topicsKey = 'character_memory_topics_v1';
+  static const maxOpenTopicsPerCharacter = 50;
 
   final ValueNotifier<MemorySettings> settings = ValueNotifier<MemorySettings>(
     MemorySettings.defaults,
@@ -20,10 +23,14 @@ class MemoryStore {
 
   final Map<String, List<MemoryEntry>> _byCharacter = {};
   final Map<String, MemoryExtractionState> _states = {};
+  final Map<String, MemoryProfile> _profiles = {};
+  final Map<String, List<MemoryOpenTopic>> _topics = {};
 
   Future<void> load() async {
     _byCharacter.clear();
     _states.clear();
+    _profiles.clear();
+    _topics.clear();
 
     SharedPreferences? preferences;
     try {
@@ -36,6 +43,8 @@ class MemoryStore {
       _loadSettings(preferences);
       _loadEntries(preferences);
       _loadStates(preferences);
+      _loadProfiles(preferences);
+      _loadTopics(preferences);
     } else {
       settings.value = MemorySettings.defaults;
     }
@@ -43,6 +52,10 @@ class MemoryStore {
     for (final entries in _byCharacter.values) {
       entries.sort(_compareEntryDesc);
       _trim(entries);
+    }
+    for (final topics in _topics.values) {
+      topics.sort(_compareTopicDesc);
+      _trimTopics(topics);
     }
     revision.value++;
   }
@@ -86,6 +99,112 @@ class MemoryStore {
 
   MemoryExtractionState stateFor(String characterId) {
     return _states[characterId.trim()] ?? const MemoryExtractionState();
+  }
+
+  MemoryProfile profileFor(String characterId) {
+    final id = characterId.trim();
+    return _profiles[id] ?? MemoryProfile(characterId: id);
+  }
+
+  List<MemoryOpenTopic> openTopicsFor(
+    String characterId, {
+    bool includeResolved = false,
+  }) {
+    final topics = _topics[characterId.trim()];
+    if (topics == null) {
+      return const [];
+    }
+    return List<MemoryOpenTopic>.unmodifiable(
+      topics.where((topic) => includeResolved || topic.isOpen),
+    );
+  }
+
+  MemoryOpenTopic? openTopicById(String id) {
+    final trimmed = id.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    for (final topics in _topics.values) {
+      for (final topic in topics) {
+        if (topic.id == trimmed) {
+          return topic;
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<void> saveProfile(MemoryProfile raw) async {
+    final profile = raw.normalized();
+    if (profile.characterId.isEmpty) {
+      return;
+    }
+    if (profile.isEmpty) {
+      if (_profiles.remove(profile.characterId) == null) {
+        return;
+      }
+    } else {
+      _profiles[profile.characterId] = profile;
+    }
+    revision.value++;
+    await _persistProfiles();
+  }
+
+  Future<void> saveOpenTopic(MemoryOpenTopic raw) async {
+    final topic = raw.normalized();
+    if (topic.id.isEmpty ||
+        topic.characterId.isEmpty ||
+        topic.text.isEmpty ||
+        topic.createdAtMs <= 0) {
+      return;
+    }
+    final topics = _topics.putIfAbsent(topic.characterId, () => []);
+    topics.removeWhere((item) => item.id == topic.id);
+    topics.add(topic);
+    topics.sort(_compareTopicDesc);
+    _trimTopics(topics);
+    revision.value++;
+    await _persistTopics();
+  }
+
+  Future<void> resolveOpenTopic(String id, {int resolvedAtMs = 0}) async {
+    final topic = openTopicById(id);
+    if (topic == null || !topic.isOpen) {
+      return;
+    }
+    final now = resolvedAtMs > 0
+        ? resolvedAtMs
+        : DateTime.now().millisecondsSinceEpoch;
+    await saveOpenTopic(
+      topic.copyWith(
+        status: MemoryOpenTopicStatus.resolved,
+        updatedAtMs: now,
+        resolvedAtMs: now,
+      ),
+    );
+  }
+
+  Future<void> deleteOpenTopic(String id) async {
+    final trimmed = id.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    var changed = false;
+    for (final topics in _topics.entries.toList()) {
+      final before = topics.value.length;
+      topics.value.removeWhere((topic) => topic.id == trimmed);
+      if (topics.value.length != before) {
+        changed = true;
+        if (topics.value.isEmpty) {
+          _topics.remove(topics.key);
+        }
+      }
+    }
+    if (!changed) {
+      return;
+    }
+    revision.value++;
+    await _persistTopics();
   }
 
   Future<void> saveEntry(MemoryEntry raw) async {
@@ -179,12 +298,16 @@ class MemoryStore {
     }
     final removedEntries = _byCharacter.remove(id) != null;
     final removedState = _states.remove(id) != null;
-    if (!removedEntries && !removedState) {
+    final removedProfile = _profiles.remove(id) != null;
+    final removedTopics = _topics.remove(id) != null;
+    if (!removedEntries && !removedState && !removedProfile && !removedTopics) {
       return;
     }
     revision.value++;
     await _persistEntries();
     await _persistStates();
+    await _persistProfiles();
+    await _persistTopics();
   }
 
   Future<void> saveState(String characterId, MemoryExtractionState next) async {
@@ -308,6 +431,84 @@ class MemoryStore {
     }
   }
 
+  void _loadProfiles(SharedPreferences preferences) {
+    try {
+      final raw = preferences.getString(_profilesKey);
+      if (raw == null || raw.isEmpty) {
+        return;
+      }
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return;
+      }
+      for (final item in decoded.entries) {
+        if (item.key is! String || item.value is! Map) {
+          continue;
+        }
+        try {
+          final profile = MemoryProfile.fromJson(
+            Map<String, dynamic>.from(item.value as Map),
+          );
+          final id = (item.key as String).trim();
+          if (id.isEmpty || profile.isEmpty) {
+            continue;
+          }
+          _profiles[id] = profile.copyWith(characterId: id);
+        } catch (_) {
+          // 跳过损坏的人物档案。
+        }
+      }
+    } catch (_) {
+      // 人物档案损坏时保留记忆列表和其他数据。
+    }
+  }
+
+  void _loadTopics(SharedPreferences preferences) {
+    try {
+      final raw = preferences.getString(_topicsKey);
+      if (raw == null || raw.isEmpty) {
+        return;
+      }
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return;
+      }
+      for (final item in decoded.entries) {
+        if (item.key is! String || item.value is! List) {
+          continue;
+        }
+        final id = (item.key as String).trim();
+        if (id.isEmpty) {
+          continue;
+        }
+        final seen = <String>{};
+        for (final value in item.value as List) {
+          if (value is! Map) {
+            continue;
+          }
+          try {
+            final topic = MemoryOpenTopic.fromJson(
+              Map<String, dynamic>.from(value),
+            );
+            if (topic.id.isEmpty ||
+                topic.text.isEmpty ||
+                topic.createdAtMs <= 0 ||
+                !seen.add(topic.id)) {
+              continue;
+            }
+            _topics
+                .putIfAbsent(id, () => [])
+                .add(topic.copyWith(characterId: id));
+          } catch (_) {
+            // 跳过损坏的未完成话题。
+          }
+        }
+      }
+    } catch (_) {
+      // 未完成话题损坏时保留其他记忆数据。
+    }
+  }
+
   void _trim(List<MemoryEntry> entries) {
     final limit = settings.value.maxMemoriesPerCharacter;
     if (entries.length <= limit) {
@@ -346,6 +547,41 @@ class MemoryStore {
     return b.importance.compareTo(a.importance);
   }
 
+  int _compareTopicDesc(MemoryOpenTopic a, MemoryOpenTopic b) {
+    final byOpen = (a.isOpen ? 0 : 1).compareTo(b.isOpen ? 0 : 1);
+    if (byOpen != 0) {
+      return byOpen;
+    }
+    final byUpdated = b.updatedAtMs.compareTo(a.updatedAtMs);
+    if (byUpdated != 0) {
+      return byUpdated;
+    }
+    return b.importance.compareTo(a.importance);
+  }
+
+  void _trimTopics(List<MemoryOpenTopic> topics) {
+    if (topics.length <= maxOpenTopicsPerCharacter) {
+      return;
+    }
+    final removable = List<MemoryOpenTopic>.of(topics)
+      ..sort((a, b) {
+        final byStatus = (a.isOpen ? 1 : 0).compareTo(b.isOpen ? 1 : 0);
+        if (byStatus != 0) {
+          return byStatus;
+        }
+        final byImportance = a.importance.compareTo(b.importance);
+        if (byImportance != 0) {
+          return byImportance;
+        }
+        return a.updatedAtMs.compareTo(b.updatedAtMs);
+      });
+    final removeIds = removable
+        .take(topics.length - maxOpenTopicsPerCharacter)
+        .map((topic) => topic.id)
+        .toSet();
+    topics.removeWhere((topic) => removeIds.contains(topic.id));
+  }
+
   Future<void> _persistEntries() async {
     final all = <MemoryEntry>[
       for (final entries in _byCharacter.values) ...entries,
@@ -372,6 +608,36 @@ class MemoryStore {
       );
     } catch (_) {
       // 记忆状态保存失败不阻断聊天。
+    }
+  }
+
+  Future<void> _persistProfiles() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(
+        _profilesKey,
+        jsonEncode({
+          for (final entry in _profiles.entries)
+            entry.key: entry.value.toJson(),
+        }),
+      );
+    } catch (_) {
+      // 人物档案保存失败不阻断聊天。
+    }
+  }
+
+  Future<void> _persistTopics() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(
+        _topicsKey,
+        jsonEncode({
+          for (final entry in _topics.entries)
+            entry.key: [for (final topic in entry.value) topic.toJson()],
+        }),
+      );
+    } catch (_) {
+      // 未完成话题保存失败不阻断聊天。
     }
   }
 }

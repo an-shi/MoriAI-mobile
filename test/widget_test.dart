@@ -116,6 +116,14 @@ void main() {
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('人物档案'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, '人物档案'), findsOneWidget);
+    expect(find.text('未完成话题'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('日记'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, '日记'), findsOneWidget);

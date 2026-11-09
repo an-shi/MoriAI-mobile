@@ -249,10 +249,14 @@ class MemoryService with WidgetsBindingObserver {
         : pending;
     try {
       final existing = MemoryStore.instance.entriesFor(character.id);
+      final profile = MemoryStore.instance.profileFor(character.id);
+      final openTopics = MemoryStore.instance.openTopicsFor(character.id);
       final result = await _extractor.extract(
         character: character,
         messages: batch,
         existing: existing,
+        profile: profile,
+        openTopics: openTopics,
       );
       if (CharacterStore.instance.cardById(character.id) == null) {
         throw const MemoryException('角色卡不存在或已被删除。');
@@ -267,6 +271,10 @@ class MemoryService with WidgetsBindingObserver {
           now: now,
         );
       }
+      if (await _applyProfile(character, result.profile, now: now)) {
+        changed++;
+      }
+      changed += await _applyOpenTopics(character, result.openTopics, now: now);
       await MemoryStore.instance.saveState(
         character.id,
         before.copyWith(
@@ -360,6 +368,137 @@ class MemoryService with WidgetsBindingObserver {
     current.add(entry);
     await MemoryStore.instance.saveEntry(entry);
     return 1;
+  }
+
+  Future<bool> _applyProfile(
+    CharacterProfile character,
+    MemoryProfile incoming, {
+    required DateTime now,
+  }) async {
+    if (incoming.isEmpty) {
+      return false;
+    }
+    final current = MemoryStore.instance.profileFor(character.id);
+    final dates = <String>[...current.importantDates];
+    for (final date in incoming.importantDates) {
+      if (!dates.contains(date)) {
+        dates.add(date);
+      }
+    }
+    final next = current.copyWith(
+      characterId: character.id,
+      summary: incoming.summary.isNotEmpty ? incoming.summary : current.summary,
+      preferences: incoming.preferences.isNotEmpty
+          ? incoming.preferences
+          : current.preferences,
+      recentFocus: incoming.recentFocus.isNotEmpty
+          ? incoming.recentFocus
+          : current.recentFocus,
+      importantDates: dates.isEmpty ? current.importantDates : dates,
+      updatedAtMs: now.millisecondsSinceEpoch,
+    );
+    if (next.summary == current.summary &&
+        next.preferences == current.preferences &&
+        next.recentFocus == current.recentFocus &&
+        _sameDates(next.importantDates, current.importantDates)) {
+      return false;
+    }
+    await MemoryStore.instance.saveProfile(next);
+    return true;
+  }
+
+  bool _sameDates(List<String> a, List<String> b) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var index = 0; index < a.length; index++) {
+      if (a[index] != b[index]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<int> _applyOpenTopics(
+    CharacterProfile character,
+    List<MemoryOpenTopicCandidate> candidates, {
+    required DateTime now,
+  }) async {
+    if (candidates.isEmpty) {
+      return 0;
+    }
+    final existing = MemoryStore.instance.openTopicsFor(
+      character.id,
+      includeResolved: true,
+    );
+    final nowMs = now.millisecondsSinceEpoch;
+    var changed = 0;
+    for (var index = 0; index < candidates.length; index++) {
+      final candidate = candidates[index];
+      MemoryOpenTopic? match;
+      if (candidate.id.isNotEmpty) {
+        for (final topic in existing) {
+          if (topic.id == candidate.id) {
+            match = topic;
+            break;
+          }
+        }
+      }
+      if (match == null && candidate.text.isNotEmpty) {
+        for (final topic in existing) {
+          if (!topic.isOpen) {
+            continue;
+          }
+          if (memorySimilarity(topic.text, candidate.text) >= 0.7) {
+            match = topic;
+            break;
+          }
+        }
+      }
+
+      if (match != null) {
+        if (!match.isOpen) {
+          continue;
+        }
+        if (candidate.resolved) {
+          await MemoryStore.instance.resolveOpenTopic(
+            match.id,
+            resolvedAtMs: nowMs,
+          );
+          changed++;
+          continue;
+        }
+        if (candidate.text.isEmpty) {
+          continue;
+        }
+        final next = match.copyWith(
+          text: candidate.text,
+          importance: max(match.importance, candidate.importance),
+          updatedAtMs: nowMs,
+        );
+        if (next.text != match.text || next.importance != match.importance) {
+          await MemoryStore.instance.saveOpenTopic(next);
+          changed++;
+        }
+        continue;
+      }
+
+      if (candidate.resolved || candidate.text.isEmpty) {
+        continue;
+      }
+      await MemoryStore.instance.saveOpenTopic(
+        MemoryOpenTopic(
+          id: 'topic_${character.id}_${now.microsecondsSinceEpoch}_$index',
+          characterId: character.id,
+          text: candidate.text,
+          importance: candidate.importance,
+          createdAtMs: nowMs,
+          updatedAtMs: nowMs,
+        ),
+      );
+      changed++;
+    }
+    return changed;
   }
 
   String _messageOf(Object error) {

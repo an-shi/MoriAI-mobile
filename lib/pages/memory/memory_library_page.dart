@@ -139,7 +139,7 @@ class _MemoryLibraryPageState extends State<MemoryLibraryPage> {
     try {
       final count = await MemoryService.instance.extractNow(character.id);
       if (mounted) {
-        _showSnackBar(count > 0 ? '整理了 $count 条记忆' : '没有发现新的长期记忆');
+        _showSnackBar(count > 0 ? '更新了 $count 项长期内容' : '没有发现新的长期记忆');
       }
     } on MemoryException catch (error) {
       if (mounted) {

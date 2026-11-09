@@ -199,6 +199,89 @@ void main() {
     expect(entries.single.tags, containsAll(['牛奶', '睡前']));
   });
 
+  test('applies profile updates and open topics from extraction', () async {
+    final now = DateTime(2026, 11, 8, 22);
+    await ChatHistoryStore.instance.saveFor(CharacterProfile.presetMoriId, [
+      ChatMessage(
+        id: 'profile_u',
+        role: ChatRole.user,
+        content: '我最近在准备换工作，下个月想去旅行。',
+        createdAt: now.subtract(const Duration(minutes: 1)),
+      ),
+      ChatMessage(
+        id: 'profile_a',
+        role: ChatRole.assistant,
+        content: '换工作辛苦了，旅行想去哪里？',
+        createdAt: now.subtract(const Duration(minutes: 1)),
+      ),
+    ]);
+    await MemoryStore.instance.saveProfile(
+      const MemoryProfile(
+        characterId: CharacterProfile.presetMoriId,
+        summary: '用户和 Mori 是朋友。',
+        updatedAtMs: 1000,
+      ),
+    );
+    await MemoryStore.instance.saveOpenTopic(
+      MemoryOpenTopic(
+        id: 'topic_done',
+        characterId: CharacterProfile.presetMoriId,
+        text: '用户说要告诉我面试结果',
+        createdAtMs: 1000,
+        updatedAtMs: 1000,
+      ),
+    );
+    final service = MemoryService.test(
+      extractor: MemoryExtractor(
+        complete: ({required systemPrompt, required userPrompt}) async => '''
+{
+  "memories": [],
+  "profile": {
+    "summary": "用户是住在杭州的设计师，和 Mori 是熟悉的朋友。",
+    "preferences": "喜欢睡前喝热牛奶。",
+    "recentFocus": "最近在准备换工作。",
+    "importantDates": ["12 月 24 日约好一起看电影"]
+  },
+  "openTopics": [
+    {"id":"topic_done","text":"","status":"resolved"},
+    {"text":"用户下个月要去旅行，还没告诉我去了哪里","status":"open","importance":0.8}
+  ]
+}
+''',
+      ),
+      now: () => now,
+    );
+    addTearDown(service.stop);
+
+    final count = await service.extractNow(CharacterProfile.presetMoriId);
+
+    expect(count, greaterThanOrEqualTo(3));
+    final profile = MemoryStore.instance.profileFor(
+      CharacterProfile.presetMoriId,
+    );
+    expect(profile.summary, contains('设计师'));
+    expect(profile.recentFocus, contains('换工作'));
+    expect(profile.importantDates.single, contains('电影'));
+
+    final open = MemoryStore.instance.openTopicsFor(
+      CharacterProfile.presetMoriId,
+    );
+    expect(open, hasLength(1));
+    expect(open.single.text, contains('旅行'));
+    final resolved = MemoryStore.instance.openTopicsFor(
+      CharacterProfile.presetMoriId,
+      includeResolved: true,
+    );
+    expect(
+      resolved.any(
+        (topic) =>
+            topic.id == 'topic_done' &&
+            topic.status == MemoryOpenTopicStatus.resolved,
+      ),
+      isTrue,
+    );
+  });
+
   test('retries after a failed extraction', () async {
     var now = DateTime(2026, 11, 8, 22);
     await seedMessages(now);

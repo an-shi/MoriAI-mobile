@@ -107,4 +107,80 @@ void main() {
     );
     expect(result.candidates, isEmpty);
   });
+
+  test('parses profile and open topics from the object payload', () async {
+    String? capturedSystem;
+    String? capturedUser;
+    final extractor = MemoryExtractor(
+      complete: ({required systemPrompt, required userPrompt}) async {
+        capturedSystem = systemPrompt;
+        capturedUser = userPrompt;
+        return '''
+```json
+{
+  "memories": [
+    {"text":"用户下个月准备去旅行","category":"plan","importance":0.8,"tags":["旅行"]}
+  ],
+  "profile": {
+    "summary": "用户是住在杭州的设计师，和 Mori 是熟悉的朋友。",
+    "preferences": "喜欢睡前喝热牛奶。",
+    "recentFocus": "最近在准备换工作。",
+    "importantDates": ["12 月 24 日约好一起看电影"]
+  },
+  "openTopics": [
+    {"id":"topic_old","text":"用户说下周要去看牙医","status":"open","importance":0.7},
+    {"id":"topic_done","text":"","status":"resolved","importance":0.5}
+  ]
+}
+```
+''';
+      },
+    );
+
+    final result = await extractor.extract(
+      character: CharacterProfile.presetMori,
+      messages: [
+        ChatMessage(
+          id: 'u1',
+          role: ChatRole.user,
+          content: '我下个月想去旅行，最近在准备换工作。',
+          createdAt: DateTime(2026, 11, 8, 21),
+        ),
+      ],
+      existing: const [],
+      profile: const MemoryProfile(
+        characterId: 'mori',
+        summary: '用户和 Mori 是朋友。',
+      ),
+      openTopics: [
+        MemoryOpenTopic(
+          id: 'topic_old',
+          characterId: 'mori',
+          text: '用户说下周要去看牙医',
+          createdAtMs: 1000,
+          updatedAtMs: 1000,
+        ),
+        MemoryOpenTopic(
+          id: 'topic_done',
+          characterId: 'mori',
+          text: '用户说要告诉我面试结果',
+          createdAtMs: 1000,
+          updatedAtMs: 1000,
+        ),
+      ],
+    );
+
+    expect(result.candidates, hasLength(1));
+    expect(result.profile.characterId, 'mori');
+    expect(result.profile.summary, contains('设计师'));
+    expect(result.profile.preferences, contains('热牛奶'));
+    expect(result.profile.recentFocus, contains('换工作'));
+    expect(result.profile.importantDates.single, contains('电影'));
+    expect(result.openTopics, hasLength(2));
+    expect(result.openTopics.first.id, 'topic_old');
+    expect(result.openTopics.last.resolved, isTrue);
+    expect(capturedSystem, contains('openTopics'));
+    expect(capturedUser, contains('topic_old'));
+    expect(capturedUser, contains('用户和 Mori 是朋友'));
+  });
 }

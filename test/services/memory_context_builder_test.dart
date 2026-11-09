@@ -43,6 +43,49 @@ void main() {
     expect(context, contains('长期记得'));
   });
 
+  test('injects the profile and open topics', () async {
+    await save('milk', '用户喜欢睡前喝热牛奶');
+    await MemoryStore.instance.saveProfile(
+      MemoryProfile(
+        characterId: 'mori',
+        summary: '用户是住在杭州的设计师，和 Mori 是朋友。',
+        preferences: '喜欢安静的音乐。',
+        recentFocus: '最近在准备换工作。',
+        importantDates: const ['12 月 24 日约好一起看电影'],
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+    await MemoryStore.instance.saveOpenTopic(
+      MemoryOpenTopic(
+        id: 'topic_1',
+        characterId: 'mori',
+        text: '用户下周要去看牙医，还没告诉我结果。',
+        createdAtMs: DateTime.now().millisecondsSinceEpoch,
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+
+    final context = MemoryContextBuilder.instance.buildForPrivateChat('mori');
+    expect(context, contains('人物小档案'));
+    expect(context, contains('设计师'));
+    expect(context, contains('安静的音乐'));
+    expect(context, contains('换工作'));
+    expect(context, contains('看电影'));
+    expect(context, contains('还没结果的事'));
+    expect(context, contains('牙医'));
+  });
+
+  test('does not inject the profile into group chat', () async {
+    await MemoryStore.instance.saveProfile(
+      MemoryProfile(
+        characterId: 'mori',
+        summary: '用户是住在杭州的设计师。',
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+    expect(MemoryContextBuilder.instance.buildForGroupChat('mori'), isEmpty);
+  });
+
   test('does not inject private memories into group chat', () async {
     await save('milk', '用户喜欢睡前喝热牛奶');
     expect(

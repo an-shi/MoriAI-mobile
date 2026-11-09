@@ -28,44 +28,64 @@ class MemoryContextBuilder {
     if (!settings.enabled || settings.recallCount <= 0) {
       return '';
     }
+    final profile = MemoryStore.instance.profileFor(characterId);
+    final openTopics = MemoryStore.instance
+        .openTopicsFor(characterId)
+        .take(3)
+        .toList(growable: false);
     final entries = MemoryStore.instance.entriesFor(characterId);
-    if (entries.isEmpty) {
+    final hits = entries.isEmpty
+        ? const <MemorySearchHit>[]
+        : searchMemories(
+            entries,
+            query,
+            limit: settings.recallCount,
+            fallbackToImportant: query.trim().isEmpty,
+          );
+    if (profile.isEmpty && openTopics.isEmpty && hits.isEmpty) {
       return '';
     }
-    final hits = searchMemories(
-      entries,
-      query,
-      limit: settings.recallCount,
-      fallbackToImportant: query.trim().isEmpty,
-    );
-    if (hits.isEmpty) {
-      return '';
+
+    final blocks = <String>[];
+    if (profile.isNotEmpty) {
+      blocks.add('【人物小档案】\n${profile.toContextLines().join('\n')}');
     }
-    unawaited(MemoryStore.instance.touch(hits.map((hit) => hit.entry.id)));
-    final now = DateTime.now();
-    final lines = <String>[];
-    for (final hit in hits) {
-      final entry = hit.entry;
-      final when = _whenText(entry.updatedAt, now);
-      final text = _clip(entry.text);
-      lines.add(
-        '- [${entry.categoryLabel}${when.isEmpty ? '' : ' · $when'}] $text',
-      );
+    if (openTopics.isNotEmpty) {
+      final now = DateTime.now();
+      final lines = <String>[];
+      for (final topic in openTopics) {
+        final when = _whenText(topic.updatedAt, now);
+        lines.add(
+          '- [待跟进${when.isEmpty ? '' : ' · $when'}] ${_clip(topic.text, 160)}',
+        );
+      }
+      blocks.add('【还没结果的事】\n${lines.join('\n')}');
     }
-    if (lines.isEmpty) {
-      return '';
+    if (hits.isNotEmpty) {
+      unawaited(MemoryStore.instance.touch(hits.map((hit) => hit.entry.id)));
+      final now = DateTime.now();
+      final lines = <String>[];
+      for (final hit in hits) {
+        final entry = hit.entry;
+        final when = _whenText(entry.updatedAt, now);
+        final text = _clip(entry.text);
+        lines.add(
+          '- [${entry.categoryLabel}${when.isEmpty ? '' : ' · $when'}] $text',
+        );
+      }
+      blocks.add(lines.join('\n'));
     }
     return '（以下是你长期记得的关于对方的事，不是对方刚说的。'
         '只在自然相关时使用，可以顺口提起，但不要逐条复述，也不要编造。）\n'
-        '${lines.join('\n')}';
+        '${blocks.join('\n\n')}';
   }
 
-  String _clip(String text) {
+  String _clip(String text, [int max = 120]) {
     final normalized = text.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (normalized.length <= 120) {
+    if (normalized.length <= max) {
       return normalized;
     }
-    return '${normalized.substring(0, 120)}…';
+    return '${normalized.substring(0, max)}…';
   }
 
   String _whenText(DateTime time, DateTime now) {

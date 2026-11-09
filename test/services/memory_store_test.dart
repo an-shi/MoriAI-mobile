@@ -196,4 +196,92 @@ void main() {
     expect(stored.any((entry) => entry.id == 'm1'), isTrue);
     expect(stored.any((entry) => entry.id == 'm2'), isFalse);
   });
+
+  test('persists the profile and open topics with the memory store', () async {
+    await MemoryStore.instance.saveProfile(
+      MemoryProfile(
+        characterId: 'mori',
+        summary: '用户是住在杭州的设计师，和 Mori 是熟悉的朋友。',
+        preferences: '喜欢热牛奶和安静的音乐。',
+        recentFocus: '最近在准备换工作。',
+        importantDates: const ['12 月 24 日约好一起看电影'],
+        updatedAtMs: 2000,
+      ),
+    );
+    await MemoryStore.instance.saveOpenTopic(
+      MemoryOpenTopic(
+        id: 'topic_1',
+        characterId: 'mori',
+        text: '用户下周要去看牙医，还没告诉我结果。',
+        importance: 0.8,
+        createdAtMs: 1500,
+        updatedAtMs: 1500,
+      ),
+    );
+
+    await MemoryStore.instance.load();
+    final profile = MemoryStore.instance.profileFor('mori');
+    expect(profile.summary, contains('设计师'));
+    expect(profile.preferences, contains('热牛奶'));
+    expect(profile.recentFocus, contains('换工作'));
+    expect(profile.importantDates.single, contains('电影'));
+
+    final topics = MemoryStore.instance.openTopicsFor('mori');
+    expect(topics, hasLength(1));
+    expect(topics.single.text, contains('牙医'));
+    expect(topics.single.isOpen, isTrue);
+  });
+
+  test('resolves and deletes open topics', () async {
+    await MemoryStore.instance.saveOpenTopic(
+      MemoryOpenTopic(
+        id: 'topic_1',
+        characterId: 'mori',
+        text: '用户说要告诉我面试结果。',
+        createdAtMs: 1000,
+        updatedAtMs: 1000,
+      ),
+    );
+
+    await MemoryStore.instance.resolveOpenTopic('topic_1', resolvedAtMs: 2000);
+    expect(MemoryStore.instance.openTopicsFor('mori'), isEmpty);
+    final resolved = MemoryStore.instance.openTopicsFor(
+      'mori',
+      includeResolved: true,
+    );
+    expect(resolved.single.status, MemoryOpenTopicStatus.resolved);
+    expect(resolved.single.resolvedAtMs, 2000);
+
+    await MemoryStore.instance.deleteOpenTopic('topic_1');
+    expect(
+      MemoryStore.instance.openTopicsFor('mori', includeResolved: true),
+      isEmpty,
+    );
+  });
+
+  test('clearing a character also clears the profile and topics', () async {
+    await MemoryStore.instance.saveProfile(
+      MemoryProfile(
+        characterId: 'mori',
+        summary: '用户是 Mori 的朋友。',
+        updatedAtMs: 1000,
+      ),
+    );
+    await MemoryStore.instance.saveOpenTopic(
+      MemoryOpenTopic(
+        id: 'topic_1',
+        characterId: 'mori',
+        text: '用户说要告诉我周末的安排。',
+        createdAtMs: 1000,
+        updatedAtMs: 1000,
+      ),
+    );
+
+    await MemoryStore.instance.clearForCharacter('mori');
+    expect(MemoryStore.instance.profileFor('mori').isEmpty, isTrue);
+    expect(
+      MemoryStore.instance.openTopicsFor('mori', includeResolved: true),
+      isEmpty,
+    );
+  });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mori_ai/pages/memory/character_card_settings_page.dart';
 import 'package:mori_ai/pages/memory/diary_page.dart';
+import 'package:mori_ai/pages/memory/memory_dossier_page.dart';
 import 'package:mori_ai/pages/memory/memory_library_page.dart';
 
 class MemoryPage extends StatelessWidget {
@@ -38,6 +39,24 @@ class MemoryPage extends StatelessWidget {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const MemoryLibraryPage(),
+                    ),
+                  );
+                },
+              ),
+              Divider(
+                height: 1,
+                indent: 72,
+                endIndent: 16,
+                color: colors.outlineVariant,
+              ),
+              _MemoryMenuTile(
+                icon: Icons.badge_outlined,
+                title: '人物档案',
+                subtitle: '查看对方档案和待跟进话题',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const MemoryDossierPage(),
                     ),
                   );
                 },
