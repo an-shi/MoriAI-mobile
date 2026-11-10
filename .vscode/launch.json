@@ -1,0 +1,27 @@
+{
+  // 使用 VS Code 的 Dart / Flutter 扩展进行调试。
+  // F5 默认启动第一个配置（Chrome），也可以从“运行和调试”面板切换设备。
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Mori (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["-d", "chrome"]
+    },
+    {
+      "name": "Mori (Android 真机/模拟器)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart"
+    },
+    {
+      "name": "Mori (使用当前设备)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["--debug"]
+    }
+  ]
+}

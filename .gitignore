@@ -22,6 +22,10 @@ migrate_working_dir/
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.
 #.vscode/
+#
+# 保留团队共享的 launch.json / extensions.json，只忽略本机相关配置。
+.vscode/settings.json
+.vscode/*.local.json
 
 # Flutter/Dart/Pub related
 **/doc/api/
