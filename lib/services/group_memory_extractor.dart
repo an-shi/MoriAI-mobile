@@ -9,6 +9,7 @@ import 'package:mori_ai/models/memory.dart';
 import 'package:mori_ai/services/api_key_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/model_store.dart';
+import 'package:mori_ai/services/system_context_builder.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
 
 typedef GroupMemoryCompletion = Future<String> Function({
@@ -99,7 +100,10 @@ class GroupMemoryExtractor {
         : profile.toContextLines().join('\n');
     final systemPrompt =
         '''
+${SystemContextBuilder.instance.build()}
+
 你是一个群聊公共记忆整理助手。你要从群「${group.displayName}」的聊天里，整理大家共同知道、可以在这个群里自然提起的事。
+如果素材里出现“明天”“下周”“下个月”等相对时间，请结合当前日期换算成具体日期后再写入记忆。
 群成员有：${memberNames.isEmpty ? '若干角色' : memberNames}。用户在聊天中显示为「$userLabel」。
 只记录群聊公共信息：共同经历、共同计划或约定、群里反复出现的共同话题和梗、群氛围和成员相处方式、群里公开的重要日期。
 不要记录：单聊私事、只对某个人说的秘密、敏感信息（密码/验证码/银行卡/身份证/API Key 等）、临时情绪、寒暄、重复、无信息量内容、角色自己的设定。

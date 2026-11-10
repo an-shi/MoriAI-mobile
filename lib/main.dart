@@ -22,6 +22,7 @@ import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/pinned_conversation_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
+import 'package:mori_ai/services/system_context_settings_store.dart';
 import 'package:mori_ai/services/theme_store.dart';
 import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
@@ -40,6 +41,7 @@ Future<void> main() async {
     MomentInteractionSettingsStore.instance.load(),
     ProactiveMessageStore.instance.load(),
     ChatBurstSettingsStore.instance.load(),
+    SystemContextSettingsStore.instance.load(),
     CharacterActivityStore.instance.load(),
     MoodStore.instance.load(),
     DiaryStore.instance.load(),

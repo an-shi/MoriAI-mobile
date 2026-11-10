@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:mori_ai/models/chat_burst_settings.dart';
+import 'package:mori_ai/models/system_context_settings.dart';
 import 'package:mori_ai/services/chat_burst_settings_store.dart';
+import 'package:mori_ai/services/system_context_settings_store.dart';
 import 'package:mori_ai/widgets/number_setting_field.dart';
 
 class ChatSettingsPage extends StatelessWidget {
@@ -14,6 +16,21 @@ class ChatSettingsPage extends StatelessWidget {
     ChatBurstTendency.active,
   ];
 
+  Future<void> _saveSystemSettings(
+    BuildContext context,
+    SystemContextSettings next,
+  ) async {
+    try {
+      await SystemContextSettingsStore.instance.save(next);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('系统感知设置保存失败，请重试')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -21,12 +38,62 @@ class ChatSettingsPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('聊天设置')),
-      body: ValueListenableBuilder<ChatBurstSettings>(
-        valueListenable: ChatBurstSettingsStore.instance.settings,
-        builder: (context, settings, _) {
+      body: AnimatedBuilder(
+        animation: Listenable.merge([
+          ChatBurstSettingsStore.instance.settings,
+          SystemContextSettingsStore.instance.settings,
+        ]),
+        builder: (context, _) {
+          final settings = ChatBurstSettingsStore.instance.settings.value;
+          final systemSettings =
+              SystemContextSettingsStore.instance.settings.value;
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             children: [
+              Text(
+                '系统感知',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '让角色知道当前日期、时间、星期和时区；这些信息只用于理解对话语境，不需要额外系统权限。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                elevation: 0,
+                color: colors.surfaceContainerLow,
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  secondary: Icon(
+                    Icons.schedule_outlined,
+                    color: colors.primary,
+                  ),
+                  title: const Text('让角色知道当前时间'),
+                  subtitle: const Text('单聊、群聊、主动消息和动态生成会参考当前时间；关闭后不注入日期和时间。'),
+                  value: systemSettings.timeAwarenessEnabled,
+                  onChanged: (value) {
+                    unawaited(
+                      _saveSystemSettings(
+                        context,
+                        systemSettings.copyWith(timeAwarenessEnabled: value),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 24),
               Text(
                 '连发倾向',
                 style: theme.textTheme.titleMedium?.copyWith(

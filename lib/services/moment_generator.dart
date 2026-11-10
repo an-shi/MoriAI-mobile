@@ -12,6 +12,7 @@ import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:mori_ai/services/mood_store.dart';
+import 'package:mori_ai/services/system_context_builder.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
 import 'package:mori_ai/utils/chat_text_utils.dart';
 
@@ -91,12 +92,13 @@ class MomentService implements MomentGenerator {
               .join('\n');
     final angle = _momentAngles[_random.nextInt(_momentAngles.length)];
     final moodContext = MoodStore.instance.contextLine(character.id);
+    final systemContext = SystemContextBuilder.instance.build(now: now);
     final systemPrompt =
         '''
 ${MoriConfig.buildSystemPrompt(character)}
+$systemContext
 
 请以「${character.displayName}」的身份，写一条适合发布在社交动态里的短内容。
-当前时间：${now.month}月${now.day}日 ${_timeOfDay(now.hour)}
 本次创作方向：$angle
 最近发布过的动态（不要重复这些内容、开头、主题和句式）：
 $recentSummary
@@ -130,10 +132,12 @@ ${moodContext.isEmpty ? '' : '\n$moodContext\n'}
     final activityContext = CharacterActivityContextBuilder.instance
         .buildForMoment(character.id);
     final moodContext = MoodStore.instance.contextLine(character.id);
+    final systemContext = SystemContextBuilder.instance.build();
 
     final systemPrompt =
         '''
 ${MoriConfig.buildSystemPrompt(character)}
+$systemContext
 
 你正在浏览一条社交动态，请以「${character.displayName}」的身份写一条评论。
 动态作者：$authorName
@@ -178,10 +182,12 @@ ${moodContext.isEmpty ? '' : '\n$moodContext\n'}
     final activityContext = CharacterActivityContextBuilder.instance
         .buildForMoment(character.id);
     final moodContext = MoodStore.instance.contextLine(character.id);
+    final systemContext = SystemContextBuilder.instance.build();
 
     final systemPrompt =
         '''
 ${MoriConfig.buildSystemPrompt(character)}
+$systemContext
 
 你正在浏览一条社交动态，并准备回复其中一条评论。
 你是「${character.displayName}」。
@@ -267,28 +273,6 @@ ${moodContext.isEmpty ? '' : '\n$moodContext\n'}
           return '- $author$replyLabel：${comment.content}';
         })
         .join('\n');
-  }
-
-  String _timeOfDay(int hour) {
-    if (hour < 6) {
-      return '深夜';
-    }
-    if (hour < 9) {
-      return '早晨';
-    }
-    if (hour < 12) {
-      return '上午';
-    }
-    if (hour < 14) {
-      return '中午';
-    }
-    if (hour < 18) {
-      return '下午';
-    }
-    if (hour < 22) {
-      return '晚上';
-    }
-    return '深夜';
   }
 
   Future<String> _generate({

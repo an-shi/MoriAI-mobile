@@ -7,6 +7,7 @@ import 'package:mori_ai/models/memory.dart';
 import 'package:mori_ai/services/api_key_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/model_store.dart';
+import 'package:mori_ai/services/system_context_builder.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
 
 typedef MemoryCompletion = Future<String> Function({
@@ -111,7 +112,10 @@ class MemoryExtractor {
     final topicText = _buildOpenTopics(openTopics);
     final systemPrompt =
         '''
+${SystemContextBuilder.instance.build()}
+
 你是一个长期记忆整理助手。你要从角色「${character.displayName}」和对方「$userLabel」的聊天里，整理值得长期记住的事、一份人物小档案和未完成话题。
+如果素材里出现“明天”“下周”“下个月”等相对时间，请结合当前日期换算成具体日期后再写入记忆。
 只记录关于对方和你们关系的长期信息：身份或称呼、稳定喜好、重要关系、长期计划、约定、重要经历、相处模式、明确表达过的边界。
 不要记录：寒暄、重复、临时情绪、一次性琐事、角色自己的设定、无信息量内容、密码/验证码/银行卡/身份证/API Key 等敏感信息。
 memories 每条一句话，主语写清楚；最多 $_maxCandidates 条；importance 用 0-1 表示重要程度。

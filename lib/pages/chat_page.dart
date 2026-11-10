@@ -23,6 +23,7 @@ import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/mood_judge_service.dart';
 import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
+import 'package:mori_ai/services/system_context_builder.dart';
 import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
 import 'package:mori_ai/utils/chat_bubble_utils.dart';
@@ -559,6 +560,16 @@ AI 群成员有：$memberNames。
 直接输出回复正文，不要在正文开头添加任何人的名字或角色名前缀，界面会自动显示发送者名称。''';
   }
 
+  DateTime? _previousMessageAt(List<ChatMessage> history) {
+    for (var index = history.length - 2; index >= 0; index--) {
+      final createdAt = history[index].createdAt;
+      if (createdAt != null) {
+        return createdAt;
+      }
+    }
+    return null;
+  }
+
   Future<List<ChatMessage>> _streamReply({
     required CharacterProfile responder,
     required String conversationId,
@@ -604,8 +615,12 @@ AI 群成员有：$memberNames。
         ? ''
         : DiaryContextBuilder.instance.buildForPrivateChat(responder.id);
     final moodContext = MoodStore.instance.contextLine(responder.id);
+    final systemContext = SystemContextBuilder.instance.build(
+      previousMessageAt: _previousMessageAt(roundHistory),
+    );
     final systemPromptWithContext = [
       systemPrompt,
+      if (systemContext.isNotEmpty) systemContext,
       if (activityContext.isNotEmpty) activityContext,
       if (memoryContext.isNotEmpty) memoryContext,
       if (diaryContext.isNotEmpty) diaryContext,

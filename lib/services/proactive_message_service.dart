@@ -23,6 +23,7 @@ import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
+import 'package:mori_ai/services/system_context_builder.dart';
 import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/utils/chat_bubble_utils.dart';
 import 'package:mori_ai/utils/chat_text_utils.dart';
@@ -860,6 +861,8 @@ class ProactiveMessageService with WidgetsBindingObserver {
 
     final systemPrompt =
         '''
+${SystemContextBuilder.instance.build()}
+
 你是一个角色主动消息的“目的引擎”。你要根据真实素材，判断角色「${character.displayName}」现在最想主动做什么。
 只选一个最自然、最有依据的目的，不要为了发消息而硬找话题，不要编造素材里不存在的事件、地点或人物。
 优先使用：最近聊天、长期记忆、人物小档案、未完成话题、最近日记、角色自己的动态。
@@ -986,8 +989,10 @@ ${recentMoments.isEmpty ? '' : '\n\n【我最近发过的动态】\n$recentMomen
       character.id,
     );
     final moodContext = MoodStore.instance.contextLine(character.id);
+    final systemContext = SystemContextBuilder.instance.build();
     final systemPrompt =
         '${MoriConfig.buildSystemPrompt(character)}\n\n'
+        '${systemContext.isEmpty ? '' : '$systemContext\n\n'}'
         '$_proactiveSystemInstruction'
         '${activityContext.isEmpty ? '' : '\n\n$activityContext'}'
         '${memoryContext.isEmpty ? '' : '\n\n$memoryContext'}'

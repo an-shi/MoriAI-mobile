@@ -25,6 +25,7 @@ import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/mood_judge_service.dart';
 import 'package:mori_ai/services/mood_store.dart';
+import 'package:mori_ai/services/system_context_settings_store.dart';
 import 'package:mori_ai/services/unread_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,6 +41,7 @@ void main() {
     await DiaryStore.instance.load();
     await MemoryStore.instance.load();
     await UnreadStore.instance.load();
+    await SystemContextSettingsStore.instance.load();
     ApiKeyStore.instance.keyFor(ModelProviderCatalog.defaultProviderId).value =
         'test-key';
   });
@@ -55,6 +57,7 @@ void main() {
     await DiaryStore.instance.load();
     await MemoryStore.instance.load();
     await UnreadStore.instance.load();
+    await SystemContextSettingsStore.instance.load();
   });
 
   testWidgets('shows the image button only for vision-capable models', (
@@ -455,6 +458,15 @@ void main() {
     expect(requestBodies.single, contains('最近写过的私人日记'));
     expect(requestBodies.single, contains('昨天和用户一起看了很晚的电影。'));
     expect(requestBodies.single, contains('心情不错'));
+  });
+
+  testWidgets('injects system time context into chat prompt', (tester) async {
+    final requestBodies = <String>[];
+    await _prepareBurstTest(tester, '第一句', requestBodies: requestBodies);
+
+    expect(requestBodies.single, contains('【系统上下文】'));
+    expect(requestBodies.single, contains('当前日期：'));
+    expect(requestBodies.single, contains('当前时间：'));
   });
 
   testWidgets('observes mood changes from the user message', (tester) async {
