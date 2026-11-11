@@ -7,6 +7,7 @@ import 'package:mori_ai/services/character_activity_backfill.dart';
 import 'package:mori_ai/services/character_activity_store.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_burst_settings_store.dart';
+import 'package:mori_ai/services/chat_reply_settings_store.dart';
 import 'package:mori_ai/services/diary_service.dart';
 import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/group_memory_service.dart';
@@ -42,6 +43,7 @@ Future<void> main() async {
     MomentInteractionSettingsStore.instance.load(),
     ProactiveMessageStore.instance.load(),
     ChatBurstSettingsStore.instance.load(),
+    ChatReplySettingsStore.instance.load(),
     SystemContextSettingsStore.instance.load(),
     StickerStore.instance.load(),
     CharacterActivityStore.instance.load(),

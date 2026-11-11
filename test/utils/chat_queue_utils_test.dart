@@ -40,4 +40,23 @@ void main() {
 
     expect(history.map((message) => message.id), ['user_a', 'assistant_a']);
   });
+
+  test('includes a whole batch and excludes later queued messages', () {
+    const userC = ChatMessage(
+      id: 'user_c',
+      role: ChatRole.user,
+      content: '消息 C',
+    );
+    final history = roundHistoryForBatch(
+      [userA, userB, userC, assistantA],
+      [userA, userB, userC],
+      [userA, userB],
+    );
+
+    expect(history.map((message) => message.id), [
+      'user_a',
+      'user_b',
+      'assistant_a',
+    ]);
+  });
 }

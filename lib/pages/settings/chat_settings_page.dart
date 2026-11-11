@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:mori_ai/models/chat_burst_settings.dart';
+import 'package:mori_ai/models/chat_reply_settings.dart';
 import 'package:mori_ai/models/system_context_settings.dart';
 import 'package:mori_ai/services/chat_burst_settings_store.dart';
+import 'package:mori_ai/services/chat_reply_settings_store.dart';
 import 'package:mori_ai/services/system_context_settings_store.dart';
 import 'package:mori_ai/widgets/number_setting_field.dart';
 
@@ -31,6 +33,21 @@ class ChatSettingsPage extends StatelessWidget {
     }
   }
 
+  Future<void> _saveReplySettings(
+    BuildContext context,
+    ChatReplySettings next,
+  ) async {
+    try {
+      await ChatReplySettingsStore.instance.save(next);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('回复延迟设置保存失败，请重试')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -41,10 +58,12 @@ class ChatSettingsPage extends StatelessWidget {
       body: AnimatedBuilder(
         animation: Listenable.merge([
           ChatBurstSettingsStore.instance.settings,
+          ChatReplySettingsStore.instance.settings,
           SystemContextSettingsStore.instance.settings,
         ]),
         builder: (context, _) {
           final settings = ChatBurstSettingsStore.instance.settings.value;
+          final replySettings = ChatReplySettingsStore.instance.settings.value;
           final systemSettings =
               SystemContextSettingsStore.instance.settings.value;
           return ListView(
@@ -91,6 +110,67 @@ class ChatSettingsPage extends StatelessWidget {
                       ),
                     );
                   },
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                '回复延迟',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '控制用户发完消息后，角色多久开始回复。多条连续发送会合并成一次交谈。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                elevation: 0,
+                color: colors.surfaceContainerLow,
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  child: Column(
+                    children: [
+                      NumberSettingField(
+                        label: '发送后等待（秒）',
+                        value: replySettings.sendDelaySeconds,
+                        min: 0,
+                        helperText: '用户发完消息没有继续输入时，等待多久再回复；默认 2 秒。',
+                        onChanged: (value) {
+                          unawaited(
+                            _saveReplySettings(
+                              context,
+                              replySettings.copyWith(sendDelaySeconds: value),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      NumberSettingField(
+                        label: '失焦后等待（秒）',
+                        value: replySettings.focusLeaveDelaySeconds,
+                        min: 0,
+                        helperText: '用户发送后继续输入过时，等输入框失焦后再等待多久；默认 1 秒。',
+                        onChanged: (value) {
+                          unawaited(
+                            _saveReplySettings(
+                              context,
+                              replySettings.copyWith(
+                                focusLeaveDelaySeconds: value,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 24),

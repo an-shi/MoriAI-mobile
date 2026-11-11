@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mori_ai/models/chat_burst_settings.dart';
 import 'package:mori_ai/pages/settings/chat_settings_page.dart';
 import 'package:mori_ai/services/chat_burst_settings_store.dart';
+import 'package:mori_ai/services/chat_reply_settings_store.dart';
 import 'package:mori_ai/services/system_context_settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,12 +13,14 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await ChatBurstSettingsStore.instance.load();
+    await ChatReplySettingsStore.instance.load();
     await SystemContextSettingsStore.instance.load();
   });
 
   tearDown(() async {
     SharedPreferences.setMockInitialValues({});
     await ChatBurstSettingsStore.instance.load();
+    await ChatReplySettingsStore.instance.load();
     await SystemContextSettingsStore.instance.load();
   });
 
@@ -31,6 +34,29 @@ void main() {
     expect(find.text('连发倾向'), findsOneWidget);
     expect(find.text('条数与字数范围'), findsOneWidget);
     expect(find.text('让角色知道当前时间'), findsOneWidget);
+    expect(find.text('发送后等待（秒）'), findsOneWidget);
+    expect(find.text('失焦后等待（秒）'), findsOneWidget);
+
+    final sendDelayField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == '发送后等待（秒）',
+    );
+    await tester.enterText(sendDelayField, '3');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(ChatReplySettingsStore.instance.settings.value.sendDelaySeconds, 3);
+
+    final focusDelayField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == '失焦后等待（秒）',
+    );
+    await tester.enterText(focusDelayField, '2');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(
+      ChatReplySettingsStore.instance.settings.value.focusLeaveDelaySeconds,
+      2,
+    );
     expect(
       SystemContextSettingsStore.instance.settings.value.timeAwarenessEnabled,
       isTrue,

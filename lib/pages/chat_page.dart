@@ -17,6 +17,8 @@ import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_burst_settings_store.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_queue_store.dart';
+import 'package:mori_ai/services/chat_reply_scheduler.dart';
+import 'package:mori_ai/services/chat_reply_settings_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/diary_context_builder.dart';
 import 'package:mori_ai/services/memory_context_builder.dart';
@@ -87,6 +89,7 @@ class _ChatPageState extends State<ChatPage> {
 
   final _messages = <ChatMessage>[];
   final _inputController = TextEditingController();
+  final _inputFocusNode = FocusNode();
   final _scrollController = ScrollController();
   late final ChatService _service;
   final _imagePicker = ImagePicker();
@@ -96,8 +99,10 @@ class _ChatPageState extends State<ChatPage> {
   bool _stopRequested = false;
   ChatImage? _pendingImage;
   final _queuedUserMessages = <ChatMessage>[];
+  final _activeTurnMessageIds = <String>{};
+  late final ChatReplyScheduler _replyScheduler;
+  bool _typedDuringReply = false;
   final _pendingExternalMessages = <ChatMessage>[];
-  String? _activeTurnMessageId;
   Completer<void>? _activeStopCompleter;
   String _loadedConversationId = '';
   int _historyLoadToken = 0;
@@ -127,7 +132,22 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     _service = widget.chatService ?? ChatService();
+    _replyScheduler = ChatReplyScheduler(
+      onReady: _handleReplyReady,
+      sendDelay: () => Duration(
+        seconds:
+            ChatReplySettingsStore.instance.settings.value.sendDelaySeconds,
+      ),
+      focusLeaveDelay: () => Duration(
+        seconds: ChatReplySettingsStore
+            .instance
+            .settings
+            .value
+            .focusLeaveDelaySeconds,
+      ),
+    );
     _inputController.addListener(_handleInputChanged);
+    _inputFocusNode.addListener(_handleInputFocusChanged);
     ModelStore.instance.selection.addListener(_handleModelConfigChanged);
     ModelStore.instance.modelCatalog.addListener(_handleModelConfigChanged);
     CharacterStore.instance.cards.addListener(_handleCharactersChanged);
@@ -167,6 +187,10 @@ class _ChatPageState extends State<ChatPage> {
     _inputController
       ..removeListener(_handleInputChanged)
       ..dispose();
+    _inputFocusNode
+      ..removeListener(_handleInputFocusChanged)
+      ..dispose();
+    _replyScheduler.dispose();
     _scrollController.dispose();
     _service.dispose();
     super.dispose();
@@ -219,7 +243,7 @@ class _ChatPageState extends State<ChatPage> {
       _queuedUserMessages
         ..clear()
         ..addAll(pendingMessages);
-      _activeTurnMessageId = null;
+      _activeTurnMessageIds.clear();
       _loadedConversationId = conversationId;
       _pendingImage = null;
     });
@@ -292,6 +316,8 @@ class _ChatPageState extends State<ChatPage> {
     }
 
     _stopRequested = true;
+    _replyScheduler.cancel();
+    _typedDuringReply = false;
     _historyLoadToken++;
     _pendingExternalMessages.clear();
     final stopCompleter = _activeStopCompleter;
@@ -301,7 +327,7 @@ class _ChatPageState extends State<ChatPage> {
     _queuedUserMessages.clear();
     setState(() {
       _messages.clear();
-      _activeTurnMessageId = null;
+      _activeTurnMessageIds.clear();
     });
   }
 
@@ -386,7 +412,7 @@ class _ChatPageState extends State<ChatPage> {
       return;
     }
 
-    if (_isSending && message.id == _activeTurnMessageId) {
+    if (_isSending && _activeTurnMessageIds.contains(message.id)) {
       await _stopReply();
       if (!mounted) {
         return;
@@ -397,6 +423,9 @@ class _ChatPageState extends State<ChatPage> {
       _messages.removeWhere((item) => item.id == message.id);
       _queuedUserMessages.removeWhere((item) => item.id == message.id);
     });
+    if (_queuedUserMessages.isEmpty) {
+      _replyScheduler.cancel();
+    }
     if (message.image != null) {
       await ChatHistoryStore.instance.deleteImageFor(
         _conversationId,
@@ -431,11 +460,33 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _handleInputChanged() {
-    final hasText = _inputController.text.trim().isNotEmpty;
+    final text = _inputController.text;
+    final hasText = text.trim().isNotEmpty;
+    if (hasText && !_isSending) {
+      _replyScheduler.noteInputActivity();
+    } else if (hasText && _isSending && _queuedUserMessages.isNotEmpty) {
+      _typedDuringReply = true;
+    }
     if (hasText == _hasText) {
       return;
     }
     setState(() => _hasText = hasText);
+  }
+
+  void _handleInputFocusChanged() {
+    _replyScheduler.noteFocusChanged(_inputFocusNode.hasFocus);
+  }
+
+  void _handleReplyReady() {
+    if (!mounted || _isSending || _queuedUserMessages.isEmpty) {
+      return;
+    }
+    unawaited(_startDrain(_conversationId));
+  }
+
+  void _scheduleReplyAfterSend() {
+    _replyScheduler.scheduleAfterSend();
+    _replyScheduler.noteFocusChanged(_inputFocusNode.hasFocus);
   }
 
   Future<void> _pickImage() async {
@@ -610,15 +661,14 @@ class _ChatPageState extends State<ChatPage> {
       senderId: _isGroup ? 'user' : '',
       senderName: _isGroup ? _groupUserName() : '',
     );
-    final shouldStartDrain = !_isSending;
     setState(() => _messages.add(userMessage));
     _scrollToLatest(animate: true);
     _queuedUserMessages.add(userMessage);
     await _saveHistory(conversationId);
     await _persistQueue(conversationId);
     unawaited(ProactiveMessageService.instance.noteUserMessage(conversationId));
-    if (shouldStartDrain) {
-      await _startDrain(conversationId);
+    if (!_isSending) {
+      _scheduleReplyAfterSend();
     }
   }
 
@@ -1206,7 +1256,6 @@ AI 群成员有：$memberNames。
     );
 
     _inputController.clear();
-    final shouldStartDrain = !_isSending;
 
     setState(() {
       _messages.add(userMessage);
@@ -1219,8 +1268,8 @@ AI 群成员有：$memberNames。
     await _persistQueue(conversationId);
     unawaited(ProactiveMessageService.instance.noteUserMessage(conversationId));
 
-    if (shouldStartDrain) {
-      await _startDrain(conversationId);
+    if (!_isSending) {
+      _scheduleReplyAfterSend();
     }
   }
 
@@ -1228,6 +1277,8 @@ AI 群成员有：$memberNames。
     if (!mounted || _isSending) {
       return;
     }
+    _replyScheduler.markStarted();
+    _typedDuringReply = false;
     _stopRequested = false;
     setState(() => _isSending = true);
     ProactiveMessageService.instance.setConversationBusy(conversationId, true);
@@ -1239,20 +1290,26 @@ AI 群成员有：$memberNames。
   }
 
   Future<void> _drainQueue(String conversationId) async {
-    while (mounted && !_stopRequested && _queuedUserMessages.isNotEmpty) {
-      final message = _queuedUserMessages.first;
-      setState(() => _activeTurnMessageId = message.id);
-      await _runReplyRound(conversationId, message);
-      if (!mounted) {
-        return;
-      }
-      if (_stopRequested) {
-        break;
-      }
-      _queuedUserMessages.removeAt(0);
-      setState(() => _activeTurnMessageId = null);
-      await _persistQueue(conversationId);
+    if (!mounted || _stopRequested || _queuedUserMessages.isEmpty) {
+      return;
     }
+    final batch = List<ChatMessage>.of(_queuedUserMessages);
+    final batchIds = {for (final message in batch) message.id};
+    setState(() {
+      _activeTurnMessageIds
+        ..clear()
+        ..addAll(batchIds);
+    });
+    await _runReplyRound(conversationId, batch);
+    if (!mounted) {
+      return;
+    }
+    if (_stopRequested) {
+      return;
+    }
+    _queuedUserMessages.removeWhere((message) => batchIds.contains(message.id));
+    setState(() => _activeTurnMessageIds.clear());
+    await _persistQueue(conversationId);
   }
 
   Future<void> _finishDrain(String conversationId) async {
@@ -1264,12 +1321,14 @@ AI 群成员有：$memberNames。
     }
     setState(() {
       _isSending = false;
-      _activeTurnMessageId = null;
+      _activeTurnMessageIds.clear();
       _stopRequested = false;
     });
     if (_queuedUserMessages.isNotEmpty) {
-      await _startDrain(conversationId);
-      return;
+      final typed = _typedDuringReply;
+      _typedDuringReply = false;
+      _replyScheduler.scheduleAfterSend(typedSinceSend: typed);
+      _replyScheduler.noteFocusChanged(_inputFocusNode.hasFocus);
     }
   }
 
@@ -1278,13 +1337,14 @@ AI 群成员有：$memberNames。
       return;
     }
     _stopRequested = true;
+    _replyScheduler.cancel();
     final stopCompleter = _activeStopCompleter;
     if (stopCompleter != null && !stopCompleter.isCompleted) {
       stopCompleter.complete();
     }
     _queuedUserMessages.clear();
     if (mounted) {
-      setState(() => _activeTurnMessageId = null);
+      setState(() => _activeTurnMessageIds.clear());
     }
     await _persistQueue(_conversationId);
     if (mounted) {
@@ -1292,8 +1352,8 @@ AI 群成员有：$memberNames。
     }
   }
 
-  List<ChatMessage> _roundHistory(ChatMessage activeMessage) {
-    return roundHistoryFor(_messages, _queuedUserMessages, activeMessage);
+  List<ChatMessage> _roundHistory(List<ChatMessage> batch) {
+    return roundHistoryForBatch(_messages, _queuedUserMessages, batch);
   }
 
   bool _wantsBurstReply(String text) {
@@ -1415,12 +1475,16 @@ AI 群成员有：$memberNames。
 
   Future<void> _runReplyRound(
     String conversationId,
-    ChatMessage userMessage,
+    List<ChatMessage> userMessages,
   ) async {
     if (!mounted || _stopRequested) {
       return;
     }
 
+    final userText = userMessages
+        .map((message) => message.content.trim())
+        .where((text) => text.isNotEmpty)
+        .join('\n');
     final selection = ModelStore.instance.selection.value;
     final provider =
         ModelProviderCatalog.byId(selection.providerId) ??
@@ -1441,15 +1505,15 @@ AI 群成员有：$memberNames。
       return;
     }
 
-    final roundHistory = _roundHistory(userMessage);
+    final roundHistory = _roundHistory(userMessages);
     final model = selection.modelId;
-    final requestedBurst = _burstTarget(userMessage.content) ?? 0;
+    final requestedBurst = _burstTarget(userText) ?? 0;
 
     if (_isGroup) {
       final speakers = selectGroupSpeakers(
         members: members,
         mode: widget.group!.replyMode,
-        userMessage: userMessage.content,
+        userMessage: userText,
       );
       for (final member in speakers) {
         if (!mounted || _stopRequested) {
@@ -1457,7 +1521,7 @@ AI 群成员有：$memberNames。
         }
         await MoodStore.instance.observe(
           member.id,
-          userMessage.content,
+          userText,
           direct: false,
           owner: true,
         );
@@ -1484,13 +1548,14 @@ AI 群成员有：$memberNames。
         return;
       }
       MoodJudgeResult? judged;
-      if (MoodStore.instance.settings.value.enabled &&
+      if (userText.isNotEmpty &&
+          MoodStore.instance.settings.value.enabled &&
           MoodStore.instance.settings.value.modelJudgeEnabled) {
         judged = await (widget.moodJudgeService ?? MoodJudgeService.instance)
             .judge(
               characterName: character.displayName,
               currentMood: MoodStore.instance.snapshotFor(character.id).value,
-              userText: userMessage.content,
+              userText: userText,
               recentMessages: _messages,
             );
         if (judged != null) {
@@ -1504,7 +1569,7 @@ AI 群成员有：$memberNames。
       if (judged == null) {
         await MoodStore.instance.observe(
           character.id,
-          userMessage.content,
+          userText,
           direct: true,
           owner: true,
         );
@@ -1646,7 +1711,7 @@ AI 群成员有：$memberNames。
 
                     final queueStatus = !message.isUser
                         ? null
-                        : message.id == _activeTurnMessageId
+                        : _activeTurnMessageIds.contains(message.id)
                         ? '回复中'
                         : _queuedUserMessages.any(
                             (queued) => queued.id == message.id,
@@ -1681,6 +1746,7 @@ AI 群成员有：$memberNames。
           ),
         _Composer(
           controller: _inputController,
+          focusNode: _inputFocusNode,
           canSend: _hasText || _pendingImage != null,
           canAttachImage: canAttachImage,
           isSending: _isSending,
@@ -1717,6 +1783,7 @@ class _TimeLabel extends StatelessWidget {
 class _Composer extends StatelessWidget {
   const _Composer({
     required this.controller,
+    required this.focusNode,
     required this.canSend,
     required this.canAttachImage,
     required this.isSending,
@@ -1727,6 +1794,7 @@ class _Composer extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final bool canSend;
   final bool canAttachImage;
   final bool isSending;
@@ -1747,9 +1815,11 @@ class _Composer extends StatelessWidget {
           Expanded(
             child: TextField(
               controller: controller,
+              focusNode: focusNode,
               minLines: 1,
               maxLines: 4,
               textCapitalization: TextCapitalization.sentences,
+              onTapOutside: (_) => focusNode.unfocus(),
               decoration: InputDecoration(
                 hintText: '发消息…',
                 filled: true,

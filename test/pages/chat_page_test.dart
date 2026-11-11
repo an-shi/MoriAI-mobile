@@ -262,6 +262,81 @@ void main() {
     );
   });
 
+  testWidgets('batches consecutive messages into one reply round', (
+    tester,
+  ) async {
+    await ModelStore.instance.saveModels(
+      ModelProviderCatalog.defaultProviderId,
+      const [
+        ModelOption(
+          id: 'deepseek-chat',
+          name: 'DeepSeek Chat',
+          supportsVision: false,
+        ),
+      ],
+    );
+    await ModelStore.instance.saveSelection(
+      const ModelSelection(
+        providerId: ModelProviderCatalog.defaultProviderId,
+        modelId: 'deepseek-chat',
+      ),
+    );
+
+    final requestBodies = <String>[];
+    final client = MockClient.streaming((request, bodyStream) async {
+      requestBodies.add(utf8.decode(await bodyStream.toBytes()));
+      const sse =
+          'data: {"choices":[{"delta":{"content":"收到这两条了"}}]}\n'
+          'data: [DONE]\n';
+      return http.StreamedResponse(
+        Stream.value(utf8.encode(sse)),
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      );
+    });
+    final service = ChatService(client: client);
+    addTearDown(service.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatPage(
+            characterId: CharacterProfile.presetMoriId,
+            chatService: service,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '第一句');
+    await tester.pump();
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), '第二句');
+    await tester.pump();
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pump();
+
+    expect(requestBodies, isEmpty);
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    });
+    for (var index = 0; index < 30; index++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(requestBodies, hasLength(1));
+    expect(requestBodies.single, contains('第一句'));
+    expect(requestBodies.single, contains('第二句'));
+    expect(find.text('收到这两条了'), findsOneWidget);
+  });
+
   testWidgets('appends externally generated messages', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -421,6 +496,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byTooltip('发送'));
     await tester.pump();
+    await tester.pump(const Duration(seconds: 5));
     await tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 500));
     });
@@ -750,6 +826,8 @@ Future<void> _prepareBurstTest(
   await tester.pump();
   await tester.tap(find.byTooltip('发送'));
   await tester.pump();
+  // 先让回复延迟定时器触发，再给流式响应留出真实异步时间。
+  await tester.pump(const Duration(seconds: 5));
   for (var round = 0; round < waitRounds; round++) {
     await tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -761,5 +839,6 @@ Future<void> _prepareBurstTest(
   await tester.runAsync(() async {
     await Future<void>.delayed(const Duration(milliseconds: 100));
   });
+  await tester.pump(const Duration(seconds: 3));
   await tester.pump();
 }

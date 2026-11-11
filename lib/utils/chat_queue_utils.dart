@@ -50,9 +50,22 @@ List<ChatMessage> roundHistoryFor(
   List<ChatMessage> queuedMessages,
   ChatMessage activeMessage,
 ) {
+  return roundHistoryForBatch(messages, queuedMessages, [activeMessage]);
+}
+
+/// Builds the history for a whole user turn.
+///
+/// All messages in [batch] are treated as one turn: they are included together,
+/// while queued user messages sent after the batch are excluded.
+List<ChatMessage> roundHistoryForBatch(
+  List<ChatMessage> messages,
+  List<ChatMessage> queuedMessages,
+  List<ChatMessage> batch,
+) {
+  final batchIds = {for (final message in batch) message.id};
   final queuedIds = {
     for (final message in queuedMessages)
-      if (message.id != activeMessage.id) message.id,
+      if (!batchIds.contains(message.id)) message.id,
   };
   return [
     for (final message in messages)
