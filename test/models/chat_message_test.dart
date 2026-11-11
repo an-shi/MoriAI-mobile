@@ -67,4 +67,26 @@ void main() {
     expect(content, hasLength(1));
     expect(content.single['type'], 'image_url');
   });
+
+  test(
+    'serializes a sticker with a text fallback when images are disabled',
+    () {
+      final message = ChatMessage(
+        role: ChatRole.user,
+        content: '',
+        image: ChatImage(
+          bytes: Uint8List.fromList([255]),
+          mimeType: 'image/jpeg',
+        ),
+        isSticker: true,
+      );
+
+      final content = message.toApiJson()['content'] as List<dynamic>;
+      expect(content.first['text'], '[表情包]');
+      expect(content.last['type'], 'image_url');
+
+      final textOnly = message.toApiJson(includeImage: false);
+      expect(textOnly['content'], '[表情包]');
+    },
+  );
 }

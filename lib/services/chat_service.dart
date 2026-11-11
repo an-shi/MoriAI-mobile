@@ -27,6 +27,7 @@ class ChatService {
     required String model,
     required String systemPrompt,
     double? temperature,
+    bool includeImages = true,
   }) async* {
     final key = apiKey.trim();
     if (key.isEmpty) {
@@ -50,7 +51,9 @@ class ChatService {
         'model': modelId,
         'messages': [
           {'role': 'system', 'content': systemPrompt},
-          ...messages.map((message) => message.toApiJson()),
+          ...messages.map(
+            (message) => message.toApiJson(includeImage: includeImages),
+          ),
         ],
         'stream': true,
         'temperature': ?temperature,

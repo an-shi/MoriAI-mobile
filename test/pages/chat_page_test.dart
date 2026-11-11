@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,7 @@ import 'package:mori_ai/models/memory.dart';
 import 'package:mori_ai/models/model_option.dart';
 import 'package:mori_ai/models/mood.dart';
 import 'package:mori_ai/models/model_settings.dart';
+import 'package:mori_ai/models/sticker.dart';
 import 'package:mori_ai/pages/chat_page.dart';
 import 'package:mori_ai/services/api_key_store.dart';
 import 'package:mori_ai/services/character_activity_store.dart';
@@ -25,8 +27,10 @@ import 'package:mori_ai/services/memory_store.dart';
 import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/mood_judge_service.dart';
 import 'package:mori_ai/services/mood_store.dart';
+import 'package:mori_ai/services/sticker_store.dart';
 import 'package:mori_ai/services/system_context_settings_store.dart';
 import 'package:mori_ai/services/unread_store.dart';
+import 'package:mori_ai/widgets/sticker_picker_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -143,6 +147,119 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(UnreadStore.instance.countFor(CharacterProfile.presetMoriId), 0);
+  });
+
+  testWidgets('opens the sticker picker from the composer', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ChatPage(characterId: CharacterProfile.presetMoriId),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('表情包'), findsOneWidget);
+    await tester.tap(find.byTooltip('表情包'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('添加'), findsOneWidget);
+    expect(find.text('表情包'), findsWidgets);
+  });
+
+  testWidgets('sends a sticker and falls back to text for non-vision models', (
+    tester,
+  ) async {
+    final pngBytes = Uint8List.fromList(
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2Z8sAAAAASUVORK5CYII=',
+      ),
+    );
+    StickerStore.instance.useStickersForTest([
+      Sticker(
+        id: 'sticker_test',
+        fileName: 'sticker_test.png',
+        mimeType: 'image/png',
+        bytes: pngBytes,
+        createdAtMs: 1,
+      ),
+    ]);
+    addTearDown(() => StickerStore.instance.useStickersForTest(const []));
+
+    await ModelStore.instance.saveModels(
+      ModelProviderCatalog.defaultProviderId,
+      const [
+        ModelOption(
+          id: 'deepseek-chat',
+          name: 'DeepSeek Chat',
+          supportsVision: false,
+        ),
+      ],
+    );
+    await ModelStore.instance.saveSelection(
+      const ModelSelection(
+        providerId: ModelProviderCatalog.defaultProviderId,
+        modelId: 'deepseek-chat',
+      ),
+    );
+
+    final requestBodies = <String>[];
+    final client = MockClient.streaming((request, bodyStream) async {
+      requestBodies.add(utf8.decode(await bodyStream.toBytes()));
+      const sse =
+          'data: {"choices":[{"delta":{"content":"收到你的表情包了"}}]}\n'
+          'data: [DONE]\n';
+      return http.StreamedResponse(
+        Stream.value(utf8.encode(sse)),
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      );
+    });
+    final service = ChatService(client: client);
+    addTearDown(service.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatPage(
+            characterId: CharacterProfile.presetMoriId,
+            chatService: service,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('表情包'));
+    await tester.pumpAndSettle();
+    final stickerImage = find.descendant(
+      of: find.byType(StickerPickerSheet),
+      matching: find.byType(Image),
+    );
+    expect(stickerImage, findsOneWidget);
+    await tester.tap(stickerImage);
+    await tester.pump();
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    });
+    for (var index = 0; index < 50; index++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+
+    expect(requestBodies, hasLength(1));
+    expect(requestBodies.single, contains('[表情包]'));
+    expect(requestBodies.single, isNot(contains('image_url')));
+    expect(find.text('收到你的表情包了'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Image && widget.semanticLabel == '表情包',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('appends externally generated messages', (tester) async {

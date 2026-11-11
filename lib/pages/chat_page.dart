@@ -8,6 +8,7 @@ import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/chat_burst_settings.dart';
 import 'package:mori_ai/models/chat_message.dart';
 import 'package:mori_ai/models/group_profile.dart';
+import 'package:mori_ai/models/sticker.dart';
 import 'package:mori_ai/services/api_key_store.dart';
 import 'package:mori_ai/services/active_conversation_store.dart';
 import 'package:mori_ai/services/character_activity_context_builder.dart';
@@ -23,6 +24,7 @@ import 'package:mori_ai/services/model_store.dart';
 import 'package:mori_ai/services/mood_judge_service.dart';
 import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
+import 'package:mori_ai/services/sticker_store.dart';
 import 'package:mori_ai/services/system_context_builder.dart';
 import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
@@ -31,6 +33,7 @@ import 'package:mori_ai/utils/chat_queue_utils.dart';
 import 'package:mori_ai/utils/chat_text_utils.dart';
 import 'package:mori_ai/utils/group_chat_utils.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
+import 'package:mori_ai/widgets/sticker_picker_sheet.dart';
 import 'package:mori_ai/widgets/user_avatar.dart';
 
 class ChatPage extends StatefulWidget {
@@ -512,6 +515,113 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  Future<Sticker?> _addStickerFromGallery() async {
+    try {
+      final file = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 90,
+      );
+      if (file == null || !mounted) {
+        return null;
+      }
+      final bytes = await file.readAsBytes();
+      if (!mounted) {
+        return null;
+      }
+      if (bytes.isEmpty) {
+        _showSnackBar('表情包读取失败，请重新选择。');
+        return null;
+      }
+      if (bytes.lengthInBytes > 4 * 1024 * 1024) {
+        _showSnackBar('表情包不能超过 4 MB，请选择更小的图片。');
+        return null;
+      }
+      final mimeType = _imageMimeType(file);
+      if (!_supportedImageMimeTypes.contains(mimeType)) {
+        _showSnackBar('仅支持 JPEG、PNG、GIF、WebP 格式的表情包。');
+        return null;
+      }
+      final sticker = await StickerStore.instance.addSticker(bytes, mimeType);
+      if (sticker == null) {
+        _showSnackBar('表情包保存失败，请重试。');
+      }
+      return sticker;
+    } catch (_) {
+      if (mounted) {
+        _showSnackBar('无法选择表情包，请检查相册权限。');
+      }
+      return null;
+    }
+  }
+
+  Future<void> _openStickerPicker() async {
+    final sticker = await showStickerPickerSheet(
+      context,
+      onAdd: _addStickerFromGallery,
+    );
+    if (sticker != null && mounted) {
+      await _sendSticker(sticker);
+    }
+  }
+
+  Future<void> _sendSticker(Sticker sticker) async {
+    final bytes = sticker.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      _showSnackBar('表情包读取失败，请重新选择。');
+      return;
+    }
+    final conversationId = _conversationId;
+    if (_loadedConversationId != conversationId) {
+      _showSnackBar('正在加载聊天记录，请稍候');
+      return;
+    }
+    final selection = ModelStore.instance.selection.value;
+    final provider =
+        ModelProviderCatalog.byId(selection.providerId) ??
+        ModelProviderCatalog.defaultProvider;
+    final apiKey = ApiKeyStore.instance.keyFor(provider.id).value?.trim() ?? '';
+    if (apiKey.isEmpty) {
+      _showSnackBar('请先在「设置 > 模型」中填写 ${provider.name} API Key。');
+      return;
+    }
+    if (!selection.hasModel) {
+      _showSnackBar('请先在「设置 > 模型」中选择一个模型。');
+      return;
+    }
+    if (_isGroup && _groupMembers.isEmpty) {
+      _showSnackBar('群聊中没有可用角色');
+      return;
+    }
+    if (!_isGroup &&
+        CharacterStore.instance.cardById(_conversationId) == null) {
+      _showSnackBar('角色卡不存在或已被删除');
+      return;
+    }
+
+    final userMessage = ChatMessage(
+      id: _newMessageId(),
+      role: ChatRole.user,
+      content: '',
+      image: ChatImage(bytes: bytes, mimeType: sticker.mimeType),
+      isSticker: true,
+      createdAt: DateTime.now(),
+      senderId: _isGroup ? 'user' : '',
+      senderName: _isGroup ? _groupUserName() : '',
+    );
+    final shouldStartDrain = !_isSending;
+    setState(() => _messages.add(userMessage));
+    _scrollToLatest(animate: true);
+    _queuedUserMessages.add(userMessage);
+    await _saveHistory(conversationId);
+    await _persistQueue(conversationId);
+    unawaited(ProactiveMessageService.instance.noteUserMessage(conversationId));
+    if (shouldStartDrain) {
+      await _startDrain(conversationId);
+    }
+  }
+
   String _imageMimeType(XFile file) {
     final mimeType = file.mimeType?.trim().toLowerCase();
     if (mimeType != null && mimeType.startsWith('image/')) {
@@ -849,6 +959,9 @@ AI 群成员有：$memberNames。
         apiKey: apiKey,
         model: model,
         systemPrompt: effectiveSystemPrompt,
+        includeImages: ModelStore.instance.supportsVision(
+          ModelStore.instance.selection.value,
+        ),
       ),
     );
 
@@ -1571,6 +1684,7 @@ AI 群成员有：$memberNames。
           canSend: _hasText || _pendingImage != null,
           canAttachImage: canAttachImage,
           isSending: _isSending,
+          onOpenStickers: _openStickerPicker,
           onAttachImage: _pickImage,
           onSend: _sendMessage,
           onStop: _stopReply,
@@ -1606,6 +1720,7 @@ class _Composer extends StatelessWidget {
     required this.canSend,
     required this.canAttachImage,
     required this.isSending,
+    required this.onOpenStickers,
     required this.onAttachImage,
     required this.onSend,
     required this.onStop,
@@ -1615,6 +1730,7 @@ class _Composer extends StatelessWidget {
   final bool canSend;
   final bool canAttachImage;
   final bool isSending;
+  final VoidCallback onOpenStickers;
   final VoidCallback onAttachImage;
   final VoidCallback onSend;
   final VoidCallback onStop;
@@ -1650,6 +1766,12 @@ class _Composer extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          IconButton.filledTonal(
+            onPressed: onOpenStickers,
+            tooltip: '表情包',
+            icon: const Icon(Icons.emoji_emotions_outlined),
+          ),
+          const SizedBox(width: 4),
           if (canAttachImage) ...[
             IconButton.filledTonal(
               onPressed: onAttachImage,
@@ -1800,6 +1922,7 @@ class _ChatBubble extends StatelessWidget {
     final colors = theme.colorScheme;
     final isUser = message.isUser;
     final hasImage = message.image != null;
+    final isSticker = message.isSticker && hasImage;
     final waiting = !isUser && message.content.isEmpty && !hasImage;
 
     return GestureDetector(
@@ -1837,23 +1960,27 @@ class _ChatBubble extends StatelessWidget {
                     constraints: BoxConstraints(
                       maxWidth: MediaQuery.sizeOf(context).width * 0.78,
                     ),
-                    padding: hasImage
+                    padding: isSticker
+                        ? EdgeInsets.zero
+                        : hasImage
                         ? const EdgeInsets.all(6)
                         : const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 11,
                           ),
-                    decoration: BoxDecoration(
-                      color: isUser
-                          ? colors.primary
-                          : colors.surfaceContainerHighest,
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(18),
-                        topRight: const Radius.circular(18),
-                        bottomLeft: Radius.circular(isUser ? 18 : 4),
-                        bottomRight: Radius.circular(isUser ? 4 : 18),
-                      ),
-                    ),
+                    decoration: isSticker
+                        ? null
+                        : BoxDecoration(
+                            color: isUser
+                                ? colors.primary
+                                : colors.surfaceContainerHighest,
+                            borderRadius: BorderRadius.only(
+                              topLeft: const Radius.circular(18),
+                              topRight: const Radius.circular(18),
+                              bottomLeft: Radius.circular(isUser ? 18 : 4),
+                              bottomRight: Radius.circular(isUser ? 4 : 18),
+                            ),
+                          ),
                     child: waiting
                         ? SizedBox(
                             width: 18,
@@ -1861,6 +1988,31 @@ class _ChatBubble extends StatelessWidget {
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               color: colors.onSurfaceVariant,
+                            ),
+                          )
+                        : isSticker
+                        ? ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: 150,
+                              maxHeight: 150,
+                            ),
+                            child: Image.memory(
+                              message.image!.bytes,
+                              fit: BoxFit.contain,
+                              semanticLabel: '表情包',
+                              gaplessPlayback: true,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: 120,
+                                  height: 120,
+                                  color: colors.surfaceContainerHighest,
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    Icons.broken_image_outlined,
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                );
+                              },
                             ),
                           )
                         : Column(

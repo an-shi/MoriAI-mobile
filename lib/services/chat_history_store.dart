@@ -100,6 +100,7 @@ class ChatHistoryStore {
             role: role,
             content: content,
             image: image,
+            isSticker: item['isSticker'] == true,
             createdAt: createdAt,
             senderId: item['senderId'] is String
                 ? item['senderId'] as String
@@ -138,12 +139,13 @@ class ChatHistoryStore {
         final rawContent = item['content'];
         final content = rawContent is String ? rawContent.trim() : '';
         final hasImage = item['image'] is Map;
+        final isSticker = item['isSticker'] == true;
         if (content.isEmpty && !hasImage) {
           continue;
         }
 
         final preview = content.isEmpty
-            ? '[图片]'
+            ? (isSticker ? '[表情包]' : '[图片]')
             : content.replaceAll(RegExp(r'\s+'), ' ');
         final rawCreatedAt = item['createdAt'];
         final createdAt = rawCreatedAt is String
@@ -185,6 +187,7 @@ class ChatHistoryStore {
           'createdAt': (message.createdAt ?? now).toIso8601String(),
           if (message.senderId.isNotEmpty) 'senderId': message.senderId,
           if (message.senderName.isNotEmpty) 'senderName': message.senderName,
+          if (message.isSticker) 'isSticker': true,
           if (imageFile != null)
             'image': {'file': imageFile, 'mimeType': message.image!.mimeType},
         });
