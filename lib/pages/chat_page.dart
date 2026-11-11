@@ -15,6 +15,7 @@ import 'package:mori_ai/services/character_activity_context_builder.dart';
 import 'package:mori_ai/services/character_activity_recorder.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/chat_burst_settings_store.dart';
+import 'package:mori_ai/services/chat_background_reply_service.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/chat_queue_store.dart';
 import 'package:mori_ai/services/chat_reply_scheduler.dart';
@@ -45,12 +46,14 @@ class ChatPage extends StatefulWidget {
     this.characterId,
     this.chatService,
     this.moodJudgeService,
+    this.backgroundReplyService,
   });
 
   final GroupProfile? group;
   final String? characterId;
   final ChatService? chatService;
   final MoodJudgeService? moodJudgeService;
+  final ChatBackgroundReplyService? backgroundReplyService;
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -112,6 +115,9 @@ class _ChatPageState extends State<ChatPage> {
 
   String get _conversationId => widget.group?.id ?? widget.characterId ?? '';
 
+  ChatBackgroundReplyService get _backgroundReplyService =>
+      widget.backgroundReplyService ?? ChatBackgroundReplyService.instance;
+
   List<CharacterProfile> get _groupMembers {
     final group = widget.group;
     if (group == null) {
@@ -158,6 +164,9 @@ class _ChatPageState extends State<ChatPage> {
     ChatHistoryStore.instance.messageAppended.addListener(
       _handleExternalMessages,
     );
+    _backgroundReplyService.lastCompleted.addListener(
+      _handleBackgroundReplyCompleted,
+    );
     ActiveConversationStore.instance.enter(_conversationId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -179,10 +188,16 @@ class _ChatPageState extends State<ChatPage> {
     ChatHistoryStore.instance.messageAppended.removeListener(
       _handleExternalMessages,
     );
-    ProactiveMessageService.instance.setConversationBusy(
-      _conversationId,
-      false,
+    _backgroundReplyService.lastCompleted.removeListener(
+      _handleBackgroundReplyCompleted,
     );
+    final handoff = _prepareBackgroundHandoff();
+    if (!handoff) {
+      ProactiveMessageService.instance.setConversationBusy(
+        _conversationId,
+        false,
+      );
+    }
     ActiveConversationStore.instance.leave(_conversationId);
     _inputController
       ..removeListener(_handleInputChanged)
@@ -236,6 +251,9 @@ class _ChatPageState extends State<ChatPage> {
       return;
     }
 
+    final backgroundRunning = _backgroundReplyService.isRunning(
+      conversationId,
+    );
     setState(() {
       _messages
         ..clear()
@@ -246,8 +264,12 @@ class _ChatPageState extends State<ChatPage> {
       _activeTurnMessageIds.clear();
       _loadedConversationId = conversationId;
       _pendingImage = null;
+      _isSending = backgroundRunning;
     });
     _scrollToLatest();
+    if (backgroundRunning) {
+      return;
+    }
     if (pendingMessages.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _resumePendingQueue(conversationId);
@@ -266,6 +288,9 @@ class _ChatPageState extends State<ChatPage> {
       return;
     }
     if (_conversationId != conversationId) {
+      return;
+    }
+    if (_backgroundReplyService.isRunning(conversationId)) {
       return;
     }
 
@@ -361,6 +386,233 @@ class _ChatPageState extends State<ChatPage> {
     setState(() => _messages.addAll(additions));
     unawaited(UnreadStore.instance.markRead(_conversationId));
     _scrollToLatest(animate: true);
+  }
+
+  String _userText(List<ChatMessage> messages) {
+    return messages
+        .map((message) => message.content.trim())
+        .where((text) => text.isNotEmpty)
+        .join('\n');
+  }
+
+  Duration _backgroundReplyDelay() {
+    if (_isSending) {
+      // 正在流式回复时关闭页面：稍等当前请求被取消，再由后台服务重新请求。
+      return const Duration(milliseconds: 300);
+    }
+    final settings = ChatReplySettingsStore.instance.settings.value;
+    if (_replyScheduler.typedSinceSend) {
+      return Duration(seconds: settings.focusLeaveDelaySeconds);
+    }
+    final lastSentAt = _queuedUserMessages.isEmpty
+        ? null
+        : _queuedUserMessages.last.createdAt;
+    if (lastSentAt == null) {
+      return Duration(seconds: settings.sendDelaySeconds);
+    }
+    final remaining =
+        Duration(seconds: settings.sendDelaySeconds) -
+        DateTime.now().difference(lastSentAt);
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
+  bool _prepareBackgroundHandoff() {
+    // 测试里会注入假 ChatService；没有注入后台服务时不启动真实后台请求。
+    if (widget.backgroundReplyService == null && widget.chatService != null) {
+      return false;
+    }
+    if (_loadedConversationId != _conversationId) {
+      return false;
+    }
+    if (_queuedUserMessages.isEmpty) {
+      return false;
+    }
+    if (_backgroundReplyService.isRunning(_conversationId)) {
+      return false;
+    }
+
+    final batch = List<ChatMessage>.of(_queuedUserMessages);
+    final roundHistory = [
+      for (final message in _roundHistory(batch))
+        if (!(!message.isUser &&
+            message.content.trim().isEmpty &&
+            message.image == null))
+          message,
+    ];
+    final requestedBurst = _burstTarget(_userText(batch)) ?? 0;
+    final title = _isGroup
+        ? (widget.group?.displayName ?? '群聊')
+        : (CharacterStore.instance.cardById(_conversationId)?.displayName ??
+              'Mori');
+    _backgroundReplyService.schedule(
+      ChatBackgroundTurnRequest(
+        conversationId: _conversationId,
+        isGroup: _isGroup,
+        notificationTitle: title,
+        batch: batch,
+        roundHistory: roundHistory,
+        delay: _backgroundReplyDelay(),
+        buildPrompts: () => _buildBackgroundPrompts(batch, requestedBurst),
+      ),
+    );
+    return true;
+  }
+
+  ChatBackgroundSpeakerPrompt _backgroundPromptFor({
+    required CharacterProfile responder,
+    required bool showSender,
+    required String basePrompt,
+    required int requestedBurst,
+  }) {
+    final burst = _resolveBurstTarget(responder.id, requestedBurst);
+    final plan = _burstPlan(
+      characterId: responder.id,
+      forceBurst: burst.force,
+      burstTarget: burst.target,
+      continuation: false,
+    );
+    return ChatBackgroundSpeakerPrompt(
+      conversationId: _conversationId,
+      responder: responder,
+      showSender: showSender,
+      forceBurst: burst.force,
+      burstTarget: burst.target,
+      minimum: burst.minimum,
+      allowAutoSplit: plan.allowAutoSplit,
+      maxBubbles: plan.maxBubbles,
+      buildSystemPrompt:
+          (
+            history, {
+            bool continuation = false,
+            int alreadySent = 0,
+            int continuationTarget = 0,
+          }) {
+            final forceBurst = continuation ? true : burst.force;
+            final target = continuation ? continuationTarget : burst.target;
+            final promptPlan = _burstPlan(
+              characterId: responder.id,
+              forceBurst: forceBurst,
+              burstTarget: target,
+              continuation: continuation,
+            );
+            return _buildReplySystemPrompt(
+              basePrompt: basePrompt,
+              responder: responder,
+              showSender: showSender,
+              roundHistory: history,
+              forceBurst: forceBurst,
+              burstTarget: target,
+              continuation: continuation,
+              alreadySent: alreadySent,
+              plan: promptPlan,
+            );
+          },
+    );
+  }
+
+  Future<List<ChatBackgroundSpeakerPrompt>> _buildBackgroundPrompts(
+    List<ChatMessage> batch,
+    int requestedBurst,
+  ) async {
+    final userText = _userText(batch);
+    if (_isGroup) {
+      final group = widget.group;
+      if (group == null) {
+        return const [];
+      }
+      final members = _groupMembers;
+      if (members.isEmpty) {
+        return const [];
+      }
+      final speakers = selectGroupSpeakers(
+        members: members,
+        mode: group.replyMode,
+        userMessage: userText,
+      );
+      final prompts = <ChatBackgroundSpeakerPrompt>[];
+      for (final member in speakers) {
+        await MoodStore.instance.observe(
+          member.id,
+          userText,
+          direct: false,
+          owner: true,
+        );
+        prompts.add(
+          _backgroundPromptFor(
+            responder: member,
+            showSender: true,
+            basePrompt: _buildGroupSystemPrompt(member, members),
+            requestedBurst: requestedBurst,
+          ),
+        );
+      }
+      return prompts;
+    }
+
+    final character = CharacterStore.instance.cardById(_conversationId);
+    if (character == null) {
+      return const [];
+    }
+
+    MoodJudgeResult? judged;
+    if (userText.isNotEmpty &&
+        MoodStore.instance.settings.value.enabled &&
+        MoodStore.instance.settings.value.modelJudgeEnabled) {
+      judged = await (widget.moodJudgeService ?? MoodJudgeService.instance)
+          .judge(
+            characterName: character.displayName,
+            currentMood: MoodStore.instance.snapshotFor(character.id).value,
+            userText: userText,
+            recentMessages: List<ChatMessage>.of(_messages),
+          );
+      if (judged != null) {
+        await MoodStore.instance.nudge(
+          character.id,
+          judged.delta,
+          judged.reason,
+        );
+      }
+    }
+    if (judged == null) {
+      await MoodStore.instance.observe(
+        character.id,
+        userText,
+        direct: true,
+        owner: true,
+      );
+    }
+
+    return [
+      _backgroundPromptFor(
+        responder: character,
+        showSender: false,
+        basePrompt: MoriConfig.buildSystemPrompt(character),
+        requestedBurst: requestedBurst,
+      ),
+    ];
+  }
+
+  void _handleBackgroundReplyCompleted() {
+    final result = _backgroundReplyService.lastCompleted.value;
+    if (!mounted ||
+        result == null ||
+        result.conversationId != _conversationId) {
+      return;
+    }
+    if (!result.success) {
+      if (_isSending) {
+        setState(() => _isSending = false);
+      }
+      return;
+    }
+
+    final batchIds = result.batchIds.toSet();
+    _queuedUserMessages.removeWhere((message) => batchIds.contains(message.id));
+    setState(() {
+      _isSending = false;
+      _activeTurnMessageIds.clear();
+    });
+    unawaited(_loadHistory(_conversationId));
   }
 
   void _handleUserProfileChanged() {
@@ -730,24 +982,55 @@ AI 群成员有：$memberNames。
     return null;
   }
 
-  Future<List<ChatMessage>> _streamReply({
+  ({
+    ChatBurstTendency tendency,
+    ChatBurstRange range,
+    bool allowAutoSplit,
+    int maxBubbles,
+    bool jsonBurst,
+  })
+  _burstPlan({
+    required String characterId,
+    required bool forceBurst,
+    required int burstTarget,
+    required bool continuation,
+  }) {
+    final settings = ChatBurstSettingsStore.instance.settings.value;
+    final tendency = settings.tendencyFor(characterId);
+    final range = settings.rangeFor(
+      tendency == ChatBurstTendency.off && forceBurst
+          ? ChatBurstTendency.active
+          : tendency,
+    );
+    return (
+      tendency: tendency,
+      range: range,
+      allowAutoSplit: forceBurst || tendency != ChatBurstTendency.off,
+      maxBubbles: forceBurst && burstTarget > 0
+          ? burstTarget
+          : range.maxMessages,
+      jsonBurst: forceBurst && burstTarget >= 2 && !continuation,
+    );
+  }
+
+  String _buildReplySystemPrompt({
+    required String basePrompt,
     required CharacterProfile responder,
-    required String conversationId,
-    required ModelProvider provider,
-    required String apiKey,
-    required String model,
-    required String systemPrompt,
     required bool showSender,
     required List<ChatMessage> roundHistory,
-    bool forceBurst = false,
-    int burstTarget = 0,
-    bool continuation = false,
-    int alreadySent = 0,
-    bool quiet = false,
-  }) async {
-    final history = showSender
-        ? buildGroupRequestHistory(roundHistory, responderId: responder.id)
-        : List<ChatMessage>.of(roundHistory);
+    required bool forceBurst,
+    required int burstTarget,
+    required bool continuation,
+    required int alreadySent,
+    required ({
+      ChatBurstTendency tendency,
+      ChatBurstRange range,
+      bool allowAutoSplit,
+      int maxBubbles,
+      bool jsonBurst,
+    })
+    plan,
+  }) {
     final activityContext = showSender
         ? CharacterActivityContextBuilder.instance.buildForGroupChat(
             responder.id,
@@ -779,21 +1062,15 @@ AI 群成员有：$memberNames。
       previousMessageAt: _previousMessageAt(roundHistory),
     );
     final systemPromptWithContext = [
-      systemPrompt,
+      basePrompt,
       if (systemContext.isNotEmpty) systemContext,
       if (activityContext.isNotEmpty) activityContext,
       if (memoryContext.isNotEmpty) memoryContext,
       if (diaryContext.isNotEmpty) diaryContext,
       if (moodContext.isNotEmpty) moodContext,
     ].join('\n\n');
-    final burstSettings = ChatBurstSettingsStore.instance.settings.value;
-    final tendency = burstSettings.tendencyFor(responder.id);
-    final range = burstSettings.rangeFor(
-      tendency == ChatBurstTendency.off && forceBurst
-          ? ChatBurstTendency.active
-          : tendency,
-    );
-    final tendencyInstruction = switch (tendency) {
+    final range = plan.range;
+    final tendencyInstruction = switch (plan.tendency) {
       ChatBurstTendency.active => _activeBurstInstruction(range),
       ChatBurstTendency.natural => _naturalBurstInstruction(range),
       ChatBurstTendency.off || ChatBurstTendency.followGlobal => '',
@@ -801,17 +1078,12 @@ AI 群成员有：$memberNames。
     final baseSystemPrompt = tendencyInstruction.isEmpty
         ? systemPromptWithContext
         : '$systemPromptWithContext\n\n$tendencyInstruction';
-    final allowAutoSplit = forceBurst || tendency != ChatBurstTendency.off;
-    final maxBubbles = forceBurst && burstTarget > 0
-        ? burstTarget
-        : range.maxMessages;
-    final jsonBurst = forceBurst && burstTarget >= 2 && !continuation;
-    final effectiveSystemPrompt = continuation
+    return continuation
         ? '$baseSystemPrompt\n\n'
               '【续发要求】\n'
               '你已经连续发了 $alreadySent 条，还差 $burstTarget 条。\n'
               '请继续输出 $burstTarget 条简短自然的消息，每条约 ${range.minChars}-${range.maxChars} 字，用 ||| 分隔；不要重复前面已经发过的内容，不要解释，不要提及系统要求。'
-        : jsonBurst
+        : plan.jsonBurst
         ? '$baseSystemPrompt\n\n'
               '【本轮连发要求】\n'
               '用户明确要求连续发送 $burstTarget 条消息。请只输出一个 JSON 字符串数组，数组必须包含 $burstTarget 个元素，每个元素是一条自然的消息，每条约 ${range.minChars}-${range.maxChars} 字。\n'
@@ -825,6 +1097,46 @@ AI 群成员有：$memberNames。
               '不要只输出一条，不要合并成一段，不要解释格式，也不要提及系统要求。\n'
               '这是系统格式要求，优先于角色平时的单条回复习惯。'
         : baseSystemPrompt;
+  }
+
+  Future<List<ChatMessage>> _streamReply({
+    required CharacterProfile responder,
+    required String conversationId,
+    required ModelProvider provider,
+    required String apiKey,
+    required String model,
+    required String systemPrompt,
+    required bool showSender,
+    required List<ChatMessage> roundHistory,
+    bool forceBurst = false,
+    int burstTarget = 0,
+    bool continuation = false,
+    int alreadySent = 0,
+    bool quiet = false,
+  }) async {
+    final history = showSender
+        ? buildGroupRequestHistory(roundHistory, responderId: responder.id)
+        : List<ChatMessage>.of(roundHistory);
+    final plan = _burstPlan(
+      characterId: responder.id,
+      forceBurst: forceBurst,
+      burstTarget: burstTarget,
+      continuation: continuation,
+    );
+    final allowAutoSplit = plan.allowAutoSplit;
+    final maxBubbles = plan.maxBubbles;
+    final jsonBurst = plan.jsonBurst;
+    final effectiveSystemPrompt = _buildReplySystemPrompt(
+      basePrompt: systemPrompt,
+      responder: responder,
+      showSender: showSender,
+      roundHistory: roundHistory,
+      forceBurst: forceBurst,
+      burstTarget: burstTarget,
+      continuation: continuation,
+      alreadySent: alreadySent,
+      plan: plan,
+    );
     final moodDelay = MoodStore.instance.delayFactor(responder.id);
     final assistantMessage = ChatMessage(
       id: _newMessageId(),
@@ -1277,6 +1589,9 @@ AI 群成员有：$memberNames。
     if (!mounted || _isSending) {
       return;
     }
+    if (_backgroundReplyService.isRunning(conversationId)) {
+      return;
+    }
     _replyScheduler.markStarted();
     _typedDuringReply = false;
     _stopRequested = false;
@@ -1313,6 +1628,9 @@ AI 群成员有：$memberNames。
   }
 
   Future<void> _finishDrain(String conversationId) async {
+    if (!mounted) {
+      return;
+    }
     await _saveHistory(conversationId);
     await _persistQueue(conversationId);
     ProactiveMessageService.instance.setConversationBusy(conversationId, false);
@@ -1333,8 +1651,14 @@ AI 群成员有：$memberNames。
   }
 
   Future<void> _stopReply() async {
-    if (!_isSending) {
+    final backgroundRunning = _backgroundReplyService.isRunning(
+      _conversationId,
+    );
+    if (!_isSending && !backgroundRunning) {
       return;
+    }
+    if (backgroundRunning) {
+      _backgroundReplyService.cancel(_conversationId);
     }
     _stopRequested = true;
     _replyScheduler.cancel();
@@ -1587,6 +1911,9 @@ AI 群成员有：$memberNames。
       );
     }
 
+    if (!mounted || _stopRequested) {
+      return;
+    }
     await _saveHistory(conversationId);
   }
 
@@ -1709,16 +2036,6 @@ AI 群成员有：$memberNames。
                       );
                     }
 
-                    final queueStatus = !message.isUser
-                        ? null
-                        : _activeTurnMessageIds.contains(message.id)
-                        ? '回复中'
-                        : _queuedUserMessages.any(
-                            (queued) => queued.id == message.id,
-                          )
-                        ? '排队中'
-                        : null;
-
                     return Column(
                       children: [
                         if (_shouldShowTime(index))
@@ -1731,7 +2048,6 @@ AI 群成员有：$memberNames。
                           avatar: avatar,
                           showSenderName: showSenderName,
                           senderName: senderName,
-                          queueStatus: queueStatus,
                           onLongPress: () => _showMessageActions(message),
                         ),
                       ],
@@ -1975,7 +2291,6 @@ class _ChatBubble extends StatelessWidget {
     required this.avatar,
     this.showSenderName = false,
     this.senderName = '',
-    this.queueStatus,
     this.onLongPress,
   });
 
@@ -1983,7 +2298,6 @@ class _ChatBubble extends StatelessWidget {
   final Widget avatar;
   final bool showSenderName;
   final String senderName;
-  final String? queueStatus;
   final VoidCallback? onLongPress;
 
   @override
@@ -2138,29 +2452,6 @@ class _ChatBubble extends StatelessWidget {
                             ],
                           ),
                   ),
-                  if (isUser && queueStatus != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4, right: 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            queueStatus == '回复中'
-                                ? Icons.autorenew_rounded
-                                : Icons.schedule_rounded,
-                            size: 12,
-                            color: colors.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            queueStatus!,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: colors.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                 ],
               ),
             ),

@@ -25,6 +25,9 @@ class ChatReplyScheduler {
 
   bool get isPending => _pending;
 
+  /// 用户在发送后是否继续输入过；用于页面关闭时判断后台回复要等哪个延迟。
+  bool get typedSinceSend => _typedSinceSend;
+
   /// 用户发送了一条消息，开始等待下一轮回复。
   ///
   /// [typedSinceSend] 用于回复期间就继续输入的情况：回复结束后恢复等待时，

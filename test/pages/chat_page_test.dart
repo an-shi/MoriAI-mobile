@@ -10,6 +10,7 @@ import 'package:mori_ai/models/character_activity.dart';
 import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/chat_burst_settings.dart';
 import 'package:mori_ai/models/chat_message.dart';
+import 'package:mori_ai/models/chat_reply_settings.dart';
 import 'package:mori_ai/models/diary.dart';
 import 'package:mori_ai/models/memory.dart';
 import 'package:mori_ai/models/model_option.dart';
@@ -20,7 +21,10 @@ import 'package:mori_ai/pages/chat_page.dart';
 import 'package:mori_ai/services/api_key_store.dart';
 import 'package:mori_ai/services/character_activity_store.dart';
 import 'package:mori_ai/services/chat_burst_settings_store.dart';
+import 'package:mori_ai/services/chat_background_reply_service.dart';
 import 'package:mori_ai/services/chat_history_store.dart';
+import 'package:mori_ai/services/chat_queue_store.dart';
+import 'package:mori_ai/services/chat_reply_settings_store.dart';
 import 'package:mori_ai/services/chat_service.dart';
 import 'package:mori_ai/services/diary_store.dart';
 import 'package:mori_ai/services/memory_store.dart';
@@ -762,6 +766,98 @@ void main() {
       requestBodies: requestBodies,
     );
     expect(requestBodies.single, contains('3 条消息'));
+  });
+
+  testWidgets('continues the reply in the background after leaving the page', (
+    tester,
+  ) async {
+    ChatReplySettingsStore.instance.settings.value = const ChatReplySettings(
+      sendDelaySeconds: 1,
+      focusLeaveDelaySeconds: 1,
+    );
+    addTearDown(() async {
+      await ChatReplySettingsStore.instance.load();
+    });
+    await ModelStore.instance.saveModels(
+      ModelProviderCatalog.defaultProviderId,
+      const [
+        ModelOption(
+          id: 'deepseek-chat',
+          name: 'DeepSeek Chat',
+          supportsVision: false,
+        ),
+      ],
+    );
+    await ModelStore.instance.saveSelection(
+      const ModelSelection(
+        providerId: ModelProviderCatalog.defaultProviderId,
+        modelId: 'deepseek-chat',
+      ),
+    );
+
+    final client = MockClient.streaming((_, _) async {
+      const sse =
+          'data: {"choices":[{"delta":{"content":"后台回复"}}]}\n'
+          'data: [DONE]\n';
+      return http.StreamedResponse(
+        Stream.value(utf8.encode(sse)),
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      );
+    });
+    final backgroundChatService = ChatService(client: client);
+    addTearDown(backgroundChatService.dispose);
+    final backgroundService = ChatBackgroundReplyService.forTest(
+      chatService: backgroundChatService,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatPage(
+            characterId: CharacterProfile.presetMoriId,
+            backgroundReplyService: backgroundService,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '你好');
+    await tester.pump();
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pump();
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+
+    final conversationId = CharacterProfile.presetMoriId;
+    expect(
+      await ChatQueueStore.instance.loadFor(conversationId),
+      isNotEmpty,
+      reason: 'the user message should be queued before leaving',
+    );
+
+    // 关闭聊天页，触发后台接管。
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pump();
+    expect(backgroundService.isRunning(conversationId), isTrue);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pumpAndSettle();
+
+    final history = await ChatHistoryStore.instance.loadFor(conversationId);
+    expect(backgroundService.lastError, isNull);
+    expect(
+      history.map((message) => message.content).toList(),
+      contains('后台回复'),
+    );
+    expect(await ChatQueueStore.instance.loadFor(conversationId), isEmpty);
+    expect(UnreadStore.instance.countFor(conversationId), 1);
   });
 }
 
