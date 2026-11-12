@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
 
 class AboutSettingsPage extends StatelessWidget {
   const AboutSettingsPage({super.key});
@@ -11,32 +13,41 @@ class AboutSettingsPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('关于')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 32, 16, 32),
+        padding: const EdgeInsets.fromLTRB(16, 36, 16, 36),
         children: [
           Center(
             child: Column(
               children: [
                 Container(
-                  width: 84,
-                  height: 84,
+                  width: 92,
+                  height: 92,
                   decoration: BoxDecoration(
-                    color: colors.primaryContainer,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        colors.primaryContainer,
+                        colors.primary.withValues(alpha: 0.72),
+                      ],
+                    ),
                     shape: BoxShape.circle,
                   ),
+                  alignment: Alignment.center,
                   child: Icon(
-                    Icons.spa_rounded,
-                    size: 40,
+                    MoriIcons.leaf,
+                    size: 42,
                     color: colors.onPrimaryContainer,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 Text(
                   'Mori',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.4,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 5),
                 Text(
                   '温柔、真诚的 AI 陪伴助手',
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -46,34 +57,22 @@ class AboutSettingsPage extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 32),
-          Card(
-            elevation: 0,
-            color: colors.surfaceContainerLow,
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              children: [
-                const ListTile(
-                  leading: Icon(Icons.tag_rounded),
-                  title: Text('版本'),
-                  trailing: Text('1.0.0'),
-                ),
-                Divider(
-                  height: 1,
-                  indent: 16,
-                  endIndent: 16,
-                  color: colors.outlineVariant,
-                ),
-                const ListTile(
-                  leading: Icon(Icons.memory_rounded),
-                  title: Text('模型服务'),
-                  subtitle: Text('由你配置的模型供应商提供'),
-                ),
-              ],
-            ),
+          const MoriSectionHeader(label: '应用信息'),
+          const MoriSettingsGroup(
+            children: [
+              MoriSettingsTile(
+                icon: MoriIcons.tag,
+                title: '版本',
+                trailing: Text('1.0.0'),
+                showChevron: false,
+              ),
+              MoriSettingsTile(
+                icon: MoriIcons.cpu,
+                title: '模型服务',
+                subtitle: '由你配置的模型供应商提供',
+                showChevron: false,
+              ),
+            ],
           ),
           const SizedBox(height: 24),
           Text(
@@ -81,6 +80,7 @@ class AboutSettingsPage extends StatelessWidget {
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
               color: colors.onSurfaceVariant,
+              height: 1.55,
             ),
           ),
         ],

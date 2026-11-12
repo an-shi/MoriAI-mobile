@@ -9,6 +9,9 @@ import 'package:mori_ai/services/chat_history_store.dart';
 import 'package:mori_ai/services/group_store.dart';
 import 'package:mori_ai/services/pinned_conversation_store.dart';
 import 'package:mori_ai/services/unread_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/group_avatar.dart';
 
@@ -180,6 +183,10 @@ class _ChatListPageState extends State<ChatListPage> {
     return '${time.year}/${time.month}/${time.day}';
   }
 
+  String _cleanPreview(String preview) {
+    return preview.replaceAll('```', '').replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
   Future<void> _showConversationMenu({
     required BuildContext tileContext,
     required _ConversationEntry entry,
@@ -209,7 +216,7 @@ class _ChatListPageState extends State<ChatListPage> {
           value: 'pin',
           child: Row(
             children: [
-              Icon(isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded),
+              Icon(MoriIcons.pin, size: 18),
               const SizedBox(width: 12),
               Text(isPinned ? '取消置顶' : '置顶'),
             ],
@@ -240,7 +247,11 @@ class _ChatListPageState extends State<ChatListPage> {
     final colors = theme.colorScheme;
 
     if (_cards.isEmpty && _groups.isEmpty) {
-      return const Center(child: Text('还没有会话'));
+      return const MoriEmptyState(
+        icon: MoriIcons.chats,
+        title: '还没有会话',
+        message: '创建角色卡后，和他们的对话会出现在这里。',
+      );
     }
 
     final pinnedIds = PinnedConversationStore.instance.pinnedIds.value;
@@ -283,81 +294,140 @@ class _ChatListPageState extends State<ChatListPage> {
         });
 
     return RefreshIndicator(
+      color: colors.primary,
+      backgroundColor: colors.surface,
       onRefresh: _loadSummaries,
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(top: 2, bottom: 12),
         itemCount: entries.length,
         separatorBuilder: (context, index) => Divider(
-          height: 1,
-          indent: 84,
-          endIndent: 16,
-          color: colors.outlineVariant,
+          height: 0.8,
+          thickness: 0.8,
+          indent: 82,
+          endIndent: 14,
+          color: colors.outlineVariant.withValues(alpha: 0.8),
         ),
         itemBuilder: (context, index) {
           final entry = entries[index];
           final summary = _summaries[entry.id];
           final timeLabel = _formatTime(summary?.createdAt);
-          final preview =
-              summary?.preview ??
-              (entry.group != null
-                  ? '${entry.group!.memberIds.length} 位成员'
-                  : '暂无消息');
+          final preview = summary == null
+              ? (entry.group != null
+                    ? '${entry.group!.memberIds.length} 位成员'
+                    : '暂无消息')
+              : _cleanPreview(summary.preview);
           final isPinned = pinnedIds.contains(entry.id);
           final unread = UnreadStore.instance.countFor(entry.id);
+          final hasUnread = unread > 0;
 
           return Builder(
             builder: (tileContext) {
               return ListTile(
                 tileColor: isPinned ? colors.surfaceContainerLow : null,
                 contentPadding: const EdgeInsetsDirectional.fromSTEB(
-                  16,
-                  8,
-                  16,
-                  8,
+                  14,
+                  9,
+                  14,
+                  9,
                 ),
+                minVerticalPadding: 9,
+                horizontalTitleGap: 12,
                 leading: entry.card != null
-                    ? CharacterAvatar(character: entry.card!, size: 52)
-                    : GroupAvatar(group: entry.group!, size: 52),
+                    ? CharacterAvatar(character: entry.card!, size: 54)
+                    : GroupAvatar(group: entry.group!, size: 54),
                 title: Row(
                   children: [
-                    Expanded(
+                    Flexible(
                       child: Text(
                         entry.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
+                          fontWeight: hasUnread
+                              ? FontWeight.w700
+                              : FontWeight.w600,
+                          fontSize: 16,
+                          letterSpacing: -0.1,
                         ),
                       ),
                     ),
-                    if (unread > 0) ...[
-                      const SizedBox(width: 8),
-                      Badge(label: Text(unread > 99 ? '99+' : '$unread')),
-                    ],
-                    if (timeLabel != null) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        timeLabel,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
+                    if (isPinned) ...[
+                      const SizedBox(width: 5),
+                      Icon(
+                        MoriIcons.pin,
+                        size: 12.5,
+                        color: colors.primary.withValues(alpha: 0.8),
                       ),
                     ],
                   ],
                 ),
                 subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 3),
+                  padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     preview,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: summary == null
-                          ? colors.onSurfaceVariant.withValues(alpha: 0.7)
+                      color: hasUnread
+                          ? colors.onSurface
                           : colors.onSurfaceVariant,
+                      fontWeight: hasUnread ? FontWeight.w500 : FontWeight.w400,
+                      fontSize: 13.8,
+                      height: 1.35,
                     ),
                   ),
                 ),
+                trailing: (timeLabel == null && !hasUnread)
+                    ? null
+                    : SizedBox(
+                        width: 54,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (timeLabel != null)
+                              Text(
+                                timeLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: hasUnread
+                                      ? colors.primary
+                                      : colors.onSurfaceVariant,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            if (hasUnread) ...[
+                              const SizedBox(height: 5),
+                              Container(
+                                constraints: const BoxConstraints(minWidth: 20),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: colors.primary,
+                                  borderRadius: BorderRadius.circular(
+                                    MoriRadius.pill,
+                                  ),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  unread > 99 ? '99+' : '$unread',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: colors.onPrimary,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.2,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                 onLongPress: () => _showConversationMenu(
                   tileContext: tileContext,
                   entry: entry,

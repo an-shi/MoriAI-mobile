@@ -19,6 +19,9 @@ import 'package:mori_ai/services/moment_interaction_settings_store.dart';
 import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
 import 'package:mori_ai/services/theme_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -41,23 +44,17 @@ class SettingsPage extends StatelessWidget {
           MemoryStore.instance.settings,
         ]),
         builder: (context, _) {
-          final theme = Theme.of(context);
-          final colors = theme.colorScheme;
-
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            padding: MoriTheme.pagePadding,
             children: [
-              Text(
-                '偏好设置',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
+              const MoriSectionHeader(
+                label: '偏好设置',
+                padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
               ),
-              const SizedBox(height: 8),
-              _SettingsMenuCard(
+              MoriSettingsGroup(
                 children: [
-                  _SettingsMenuTile(
-                    icon: Icons.memory_rounded,
+                  MoriSettingsTile(
+                    icon: MoriIcons.cpu,
                     title: '模型',
                     subtitle: _modelSummary(),
                     onTap: () {
@@ -68,9 +65,8 @@ class SettingsPage extends StatelessWidget {
                       );
                     },
                   ),
-                  const _SettingsMenuDivider(),
-                  _SettingsMenuTile(
-                    icon: Icons.palette_outlined,
+                  MoriSettingsTile(
+                    icon: MoriIcons.palette,
                     title: '外观',
                     subtitle: _themeModeLabel(
                       ThemeStore.instance.themeMode.value,
@@ -83,9 +79,8 @@ class SettingsPage extends StatelessWidget {
                       );
                     },
                   ),
-                  const _SettingsMenuDivider(),
-                  _SettingsMenuTile(
-                    icon: Icons.forum_outlined,
+                  MoriSettingsTile(
+                    icon: MoriIcons.chats,
                     title: '聊天',
                     subtitle: _chatBurstSummary(),
                     onTap: () {
@@ -96,9 +91,8 @@ class SettingsPage extends StatelessWidget {
                       );
                     },
                   ),
-                  const _SettingsMenuDivider(),
-                  _SettingsMenuTile(
-                    icon: Icons.mood_outlined,
+                  MoriSettingsTile(
+                    icon: MoriIcons.mood,
                     title: '心情',
                     subtitle: _moodSummary(),
                     onTap: () {
@@ -109,9 +103,8 @@ class SettingsPage extends StatelessWidget {
                       );
                     },
                   ),
-                  const _SettingsMenuDivider(),
-                  _SettingsMenuTile(
-                    icon: Icons.menu_book_outlined,
+                  MoriSettingsTile(
+                    icon: MoriIcons.diary,
                     title: '日记',
                     subtitle: _diarySummary(),
                     onTap: () {
@@ -122,9 +115,8 @@ class SettingsPage extends StatelessWidget {
                       );
                     },
                   ),
-                  const _SettingsMenuDivider(),
-                  _SettingsMenuTile(
-                    icon: Icons.psychology_outlined,
+                  MoriSettingsTile(
+                    icon: MoriIcons.brain,
                     title: '记忆',
                     subtitle: _memorySummary(),
                     onTap: () {
@@ -135,9 +127,8 @@ class SettingsPage extends StatelessWidget {
                       );
                     },
                   ),
-                  const _SettingsMenuDivider(),
-                  _SettingsMenuTile(
-                    icon: Icons.auto_awesome_outlined,
+                  MoriSettingsTile(
+                    icon: MoriIcons.sparkles,
                     title: '动态互动',
                     subtitle: _momentInteractionSummary(),
                     onTap: () {
@@ -148,9 +139,8 @@ class SettingsPage extends StatelessWidget {
                       );
                     },
                   ),
-                  const _SettingsMenuDivider(),
-                  _SettingsMenuTile(
-                    icon: Icons.notifications_active_outlined,
+                  MoriSettingsTile(
+                    icon: MoriIcons.bell,
                     title: '自动消息',
                     subtitle: _proactiveMessageSummary(),
                     onTap: () {
@@ -163,18 +153,11 @@ class SettingsPage extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              Text(
-                '其他',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 8),
-              _SettingsMenuCard(
+              const MoriSectionHeader(label: '其他'),
+              MoriSettingsGroup(
                 children: [
-                  _SettingsMenuTile(
-                    icon: Icons.info_outline_rounded,
+                  MoriSettingsTile(
+                    icon: MoriIcons.info,
                     title: '关于 Mori',
                     subtitle: '版本 1.0.0',
                     onTap: () {
@@ -186,6 +169,17 @@ class SettingsPage extends StatelessWidget {
                     },
                   ),
                 ],
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 22, 4, 0),
+                child: Text(
+                  'Mori 1.0.0',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    letterSpacing: 0.3,
+                  ),
+                ),
               ),
             ],
           );
@@ -292,75 +286,5 @@ class SettingsPage extends StatelessWidget {
         ? '每日无上限'
         : '每日 ${settings.dailyLimit} 条';
     return '$silence · $scheduled · $daily';
-  }
-}
-
-class _SettingsMenuCard extends StatelessWidget {
-  const _SettingsMenuCard({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Column(children: children),
-    );
-  }
-}
-
-class _SettingsMenuTile extends StatelessWidget {
-  const _SettingsMenuTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: colors.primaryContainer,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Icon(icon, color: colors.onPrimaryContainer),
-      ),
-      title: Text(title),
-      subtitle: Text(subtitle),
-      trailing: Icon(
-        Icons.chevron_right_rounded,
-        color: colors.onSurfaceVariant,
-      ),
-      onTap: onTap,
-    );
-  }
-}
-
-class _SettingsMenuDivider extends StatelessWidget {
-  const _SettingsMenuDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Divider(
-      height: 1,
-      indent: 72,
-      endIndent: 16,
-      color: Theme.of(context).colorScheme.outlineVariant,
-    );
   }
 }

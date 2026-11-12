@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_chat_core/flutter_chat_core.dart' as chat_core;
+import 'package:flutter_chat_ui/flutter_chat_ui.dart' as chat_ui;
 import 'package:image_picker/image_picker.dart';
 import 'package:mori_ai/config/model_providers.dart';
 import 'package:mori_ai/config/mori_config.dart';
@@ -34,8 +36,15 @@ import 'package:mori_ai/services/user_profile_store.dart';
 import 'package:mori_ai/utils/chat_bubble_utils.dart';
 import 'package:mori_ai/utils/chat_queue_utils.dart';
 import 'package:mori_ai/utils/chat_text_utils.dart';
+import 'package:mori_ai/ui/mori_chat_background.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 import 'package:mori_ai/utils/group_chat_utils.dart';
+import 'package:provider/provider.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
+import 'package:mori_ai/widgets/group_avatar.dart';
+import 'package:mori_ai/widgets/mori_message_text.dart';
 import 'package:mori_ai/widgets/sticker_picker_sheet.dart';
 import 'package:mori_ai/widgets/user_avatar.dart';
 
@@ -251,9 +260,7 @@ class _ChatPageState extends State<ChatPage> {
       return;
     }
 
-    final backgroundRunning = _backgroundReplyService.isRunning(
-      conversationId,
-    );
+    final backgroundRunning = _backgroundReplyService.isRunning(conversationId);
     setState(() {
       _messages
         ..clear()
@@ -629,26 +636,27 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _showMessageActions(ChatMessage message) async {
-    final colors = Theme.of(context).colorScheme;
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
       useSafeArea: true,
       builder: (sheetContext) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                key: const Key('delete-message-action'),
-                leading: Icon(
-                  Icons.delete_outline_rounded,
-                  color: colors.error,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 20),
+            child: MoriSettingsGroup(
+              dividerIndent: 60,
+              children: [
+                MoriSettingsTile(
+                  key: const Key('delete-message-action'),
+                  icon: MoriIcons.trash,
+                  title: '删除消息',
+                  danger: true,
+                  showChevron: false,
+                  onTap: () => Navigator.of(sheetContext).pop('delete'),
                 ),
-                title: Text('删除消息', style: TextStyle(color: colors.error)),
-                onTap: () => Navigator.of(sheetContext).pop('delete'),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -753,7 +761,7 @@ class _ChatPageState extends State<ChatPage> {
             children: [
               Expanded(
                 child: _AttachmentOption(
-                  icon: Icons.photo_library_outlined,
+                  icon: MoriIcons.photos,
                   label: '照片',
                   onTap: () =>
                       Navigator.of(sheetContext).pop(ImageSource.gallery),
@@ -762,7 +770,7 @@ class _ChatPageState extends State<ChatPage> {
               const SizedBox(width: 16),
               Expanded(
                 child: _AttachmentOption(
-                  icon: Icons.photo_camera_outlined,
+                  icon: MoriIcons.camera,
                   label: '拍摄',
                   onTap: () =>
                       Navigator.of(sheetContext).pop(ImageSource.camera),
@@ -1995,101 +2003,181 @@ AI 群成员有：$memberNames。
         : CharacterStore.instance.cardById(_conversationId);
     final userProfile = UserProfileStore.instance.profile.value;
 
-    return Column(
-      children: [
-        Expanded(
-          child: _messages.isEmpty
-              ? const SizedBox.expand()
-              : ListView.builder(
-                  controller: _scrollController,
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                  itemCount: _messages.length,
-                  itemBuilder: (context, index) {
-                    final message = _messages[index];
-                    final isGroup = _isGroup;
+    return ColoredBox(
+      color: context.chatPalette.background,
+      child: Column(
+        children: [
+          Expanded(
+            child: MoriChatBackground(
+              child: _messages.isEmpty
+                  ? _ChatEmptyState(character: character, group: widget.group)
+                  : ListView.builder(
+                      controller: _scrollController,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _messages[index];
+                        final isGroup = _isGroup;
+                        final continuation = _isContinuation(index);
 
-                    final Widget avatar;
-                    var senderName = '';
-                    var showSenderName = false;
-                    if (message.isUser) {
-                      avatar = UserAvatar(profile: userProfile, size: 34);
-                    } else if (isGroup) {
-                      final sender =
-                          CharacterStore.instance.cardById(message.senderId) ??
-                          CharacterProfile(
-                            id: message.senderId,
-                            name: message.senderName,
+                        final Widget avatar;
+                        var senderName = '';
+                        var showSenderName = false;
+                        if (message.isUser) {
+                          avatar = UserAvatar(profile: userProfile, size: 32);
+                        } else if (isGroup) {
+                          final sender =
+                              CharacterStore.instance.cardById(
+                                message.senderId,
+                              ) ??
+                              CharacterProfile(
+                                id: message.senderId,
+                                name: message.senderName,
+                              );
+                          avatar = CharacterAvatar(character: sender, size: 32);
+                          senderName = message.senderName.isNotEmpty
+                              ? message.senderName
+                              : sender.displayName;
+                          showSenderName = !continuation;
+                        } else {
+                          avatar = CharacterAvatar(
+                            character:
+                                character ??
+                                CharacterProfile(
+                                  id: _conversationId,
+                                  name: '角色',
+                                ),
+                            size: 32,
                           );
-                      avatar = CharacterAvatar(character: sender, size: 34);
-                      senderName = message.senderName.isNotEmpty
-                          ? message.senderName
-                          : sender.displayName;
-                      showSenderName = true;
-                    } else {
-                      avatar = CharacterAvatar(
-                        character:
-                            character ??
-                            CharacterProfile(id: _conversationId, name: '角色'),
-                        size: 34,
-                      );
-                    }
+                        }
 
-                    return Column(
-                      children: [
-                        if (_shouldShowTime(index))
-                          _TimeLabel(
-                            text: _formatTimestamp(message.createdAt!),
-                          ),
-                        _ChatBubble(
-                          key: ValueKey('chat-message-${message.id}'),
-                          message: message,
-                          avatar: avatar,
-                          showSenderName: showSenderName,
-                          senderName: senderName,
-                          onLongPress: () => _showMessageActions(message),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-        ),
-        if (_pendingImage != null)
-          _PendingImagePreview(
-            image: _pendingImage!,
-            onRemove: () => setState(() => _pendingImage = null),
+                        return Column(
+                          children: [
+                            if (_shouldShowTime(index))
+                              MoriTimeLabel(
+                                text: _formatTimestamp(message.createdAt!),
+                              ),
+                            _MoriChatMessage(
+                              messageKey: ValueKey(
+                                'chat-message-${message.id}',
+                              ),
+                              message: message,
+                              avatar: avatar,
+                              index: index,
+                              showAvatar: !message.isUser && !continuation,
+                              showSenderName: showSenderName,
+                              senderName: senderName,
+                              timeLabel: message.createdAt == null
+                                  ? ''
+                                  : _formatBubbleTime(message.createdAt!),
+                              topSpacing: continuation ? 2 : 8,
+                              onLongPress: () => _showMessageActions(message),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+            ),
           ),
-        _Composer(
-          controller: _inputController,
-          focusNode: _inputFocusNode,
-          canSend: _hasText || _pendingImage != null,
-          canAttachImage: canAttachImage,
-          isSending: _isSending,
-          onOpenStickers: _openStickerPicker,
-          onAttachImage: _pickImage,
-          onSend: _sendMessage,
-          onStop: _stopReply,
-        ),
-      ],
+          if (_pendingImage != null)
+            _PendingImagePreview(
+              image: _pendingImage!,
+              onRemove: () => setState(() => _pendingImage = null),
+            ),
+          _Composer(
+            controller: _inputController,
+            focusNode: _inputFocusNode,
+            canSend: _hasText || _pendingImage != null,
+            canAttachImage: canAttachImage,
+            isSending: _isSending,
+            onOpenStickers: _openStickerPicker,
+            onAttachImage: _pickImage,
+            onSend: _sendMessage,
+            onStop: _stopReply,
+          ),
+        ],
+      ),
     );
+  }
+
+  bool _isContinuation(int index) {
+    if (index == 0 || _shouldShowTime(index)) {
+      return false;
+    }
+    final current = _messages[index];
+    final previous = _messages[index - 1];
+    if (current.isUser != previous.isUser) {
+      return false;
+    }
+    if (_isGroup && current.senderId != previous.senderId) {
+      return false;
+    }
+    return current.createdAt != null &&
+        previous.createdAt != null &&
+        current.createdAt!.difference(previous.createdAt!).inMinutes < 5;
+  }
+
+  String _formatBubbleTime(DateTime time) {
+    return '${time.hour.toString().padLeft(2, '0')}:'
+        '${time.minute.toString().padLeft(2, '0')}';
   }
 }
 
-class _TimeLabel extends StatelessWidget {
-  const _TimeLabel({required this.text});
+class _ChatEmptyState extends StatelessWidget {
+  const _ChatEmptyState({this.character, this.group});
 
-  final String text;
+  final CharacterProfile? character;
+  final GroupProfile? group;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 4, bottom: 10),
-      child: Text(
-        text,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
+    final colors = theme.colorScheme;
+    final subtitle = group != null ? '在群里发一条消息，大家会依次回复。' : '发一条消息，开始今天的聊天吧。';
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(32, 24, 32, 56),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.surface.withValues(alpha: 0.6),
+                border: Border.all(
+                  color: colors.primary.withValues(alpha: 0.16),
+                ),
+              ),
+              child: group != null
+                  ? GroupAvatar(group: group!, size: 80)
+                  : CharacterAvatar(
+                      character:
+                          character ??
+                          CharacterProfile(id: 'empty', name: 'Mori'),
+                      size: 80,
+                    ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '开始聊天吧',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+                height: 1.5,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -2121,65 +2209,140 @@ class _Composer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final palette = context.chatPalette;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              minLines: 1,
-              maxLines: 4,
-              textCapitalization: TextCapitalization.sentences,
-              onTapOutside: (_) => focusNode.unfocus(),
-              decoration: InputDecoration(
-                hintText: '发消息…',
-                filled: true,
-                fillColor: colors.surfaceContainerHighest,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.composerBackground,
+        border: Border(
+          top: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: 0.65),
+            width: 0.8,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(MoriRadius.xlarge),
+                    border: Border.all(
+                      color: colors.outlineVariant.withValues(alpha: 0.55),
+                      width: 0.8,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (canAttachImage)
+                        IconButton(
+                          onPressed: onAttachImage,
+                          tooltip: '发送图片',
+                          icon: const Icon(MoriIcons.imagePlus, size: 20),
+                          color: colors.onSurfaceVariant,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 38,
+                            minHeight: 42,
+                          ),
+                          style: IconButton.styleFrom(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      Expanded(
+                        child: TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          minLines: 1,
+                          maxLines: 4,
+                          textCapitalization: TextCapitalization.sentences,
+                          onTapOutside: (_) => focusNode.unfocus(),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            height: 1.4,
+                            color: colors.onSurface,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: '发消息…',
+                            filled: false,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 11,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                              color: colors.onSurfaceVariant.withValues(
+                                alpha: 0.72,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: onOpenStickers,
+                        tooltip: '表情包',
+                        icon: const Icon(MoriIcons.smile, size: 20),
+                        color: colors.onSurfaceVariant,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 38,
+                          minHeight: 42,
+                        ),
+                        style: IconButton.styleFrom(
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
+              if (isSending) ...[
+                const SizedBox(width: 6),
+                IconButton.filledTonal(
+                  onPressed: onStop,
+                  tooltip: '停止回复',
+                  icon: const Icon(MoriIcons.stop, size: 18),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(42, 42),
+                    backgroundColor: colors.surfaceContainerHigh,
+                    foregroundColor: colors.onSurfaceVariant,
+                    shape: const CircleBorder(),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+              const SizedBox(width: 7),
+              IconButton.filled(
+                onPressed: canSend ? onSend : null,
+                tooltip: '发送',
+                icon: const Icon(MoriIcons.arrowUp, size: 21),
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(43, 43),
+                  backgroundColor: colors.primary,
+                  foregroundColor: colors.onPrimary,
+                  disabledBackgroundColor: colors.surfaceContainerHigh,
+                  disabledForegroundColor: colors.onSurfaceVariant.withValues(
+                    alpha: 0.55,
+                  ),
+                  shape: const CircleBorder(),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          IconButton.filledTonal(
-            onPressed: onOpenStickers,
-            tooltip: '表情包',
-            icon: const Icon(Icons.emoji_emotions_outlined),
-          ),
-          const SizedBox(width: 4),
-          if (canAttachImage) ...[
-            IconButton.filledTonal(
-              onPressed: onAttachImage,
-              tooltip: '发送图片',
-              icon: const Icon(Icons.add_rounded),
-            ),
-            const SizedBox(width: 4),
-          ],
-          if (isSending) ...[
-            IconButton.filledTonal(
-              onPressed: onStop,
-              tooltip: '停止回复',
-              icon: const Icon(Icons.stop_rounded),
-            ),
-            const SizedBox(width: 4),
-          ],
-          IconButton.filled(
-            onPressed: canSend ? onSend : null,
-            tooltip: '发送',
-            icon: const Icon(Icons.arrow_upward_rounded),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2195,51 +2358,58 @@ class _PendingImagePreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                width: 76,
-                height: 76,
-                child: Image.memory(
-                  image.bytes,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return ColoredBox(
-                      color: colors.surfaceContainerHighest,
-                      child: Icon(
-                        Icons.broken_image_outlined,
-                        color: colors.onSurfaceVariant,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-            Positioned(
-              top: -8,
-              right: -8,
-              child: Material(
-                color: colors.surfaceContainerHighest,
-                elevation: 1,
-                shape: const CircleBorder(),
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: onRemove,
-                  child: const Padding(
-                    padding: EdgeInsets.all(4),
-                    child: Icon(Icons.close_rounded, size: 16),
+    return ColoredBox(
+      color: context.chatPalette.composerBackground,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(MoriRadius.medium),
+                child: SizedBox(
+                  width: 78,
+                  height: 78,
+                  child: Image.memory(
+                    image.bytes,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return ColoredBox(
+                        color: colors.surfaceContainerHighest,
+                        child: Icon(
+                          MoriIcons.imageOff,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
-            ),
-          ],
+              Positioned(
+                top: -7,
+                right: -7,
+                child: Material(
+                  color: colors.inverseSurface,
+                  elevation: 0,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: onRemove,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        MoriIcons.close,
+                        size: 14,
+                        color: colors.onInverseSurface,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2263,19 +2433,28 @@ class _AttachmentOption extends StatelessWidget {
     final colors = theme.colorScheme;
 
     return Material(
-      color: colors.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(16),
+      color: colors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(MoriRadius.large),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
+          padding: const EdgeInsets.symmetric(vertical: 22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 32, color: colors.primary),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 23, color: colors.onPrimaryContainer),
+              ),
               const SizedBox(height: 10),
-              Text(label, style: theme.textTheme.titleSmall),
+              Text(label, style: theme.textTheme.labelLarge),
             ],
           ),
         ),
@@ -2284,20 +2463,29 @@ class _AttachmentOption extends StatelessWidget {
   }
 }
 
-class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({
-    super.key,
+class _MoriChatMessage extends StatelessWidget {
+  const _MoriChatMessage({
+    required this.messageKey,
     required this.message,
     required this.avatar,
+    required this.index,
+    this.showAvatar = true,
     this.showSenderName = false,
     this.senderName = '',
+    this.timeLabel = '',
+    this.topSpacing = 8,
     this.onLongPress,
   });
 
+  final Key messageKey;
   final ChatMessage message;
   final Widget avatar;
+  final int index;
+  final bool showAvatar;
   final bool showSenderName;
   final String senderName;
+  final String timeLabel;
+  final double topSpacing;
   final VoidCallback? onLongPress;
 
   @override
@@ -2305,160 +2493,237 @@ class _ChatBubble extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final isUser = message.isUser;
+    final authorId = isUser
+        ? 'user'
+        : (message.senderId.isEmpty ? 'assistant' : message.senderId);
+    final chatMessage = chat_core.Message.text(
+      id: message.id,
+      authorId: authorId,
+      createdAt: message.createdAt,
+      text: message.content,
+    );
+
+    return MultiProvider(
+      providers: [
+        Provider<chat_core.UserID>.value(value: 'user'),
+        Provider<chat_ui.OnMessageTapCallback?>.value(value: null),
+        Provider<chat_ui.OnMessageDoubleTapCallback?>.value(value: null),
+        Provider<chat_ui.OnMessageSecondaryTapCallback?>.value(value: null),
+        Provider<chat_ui.OnMessageLongPressCallback?>.value(
+          value: (context, _, {required index, required details}) {
+            onLongPress?.call();
+          },
+        ),
+      ],
+      child: chat_ui.ChatMessage(
+        message: chatMessage,
+        index: index,
+        animation: const AlwaysStoppedAnimation<double>(1),
+        padding: EdgeInsets.only(top: topSpacing, bottom: 2),
+        paddingChangeAnimationDuration: null,
+        horizontalPadding: 0,
+        verticalPadding: 0,
+        verticalGroupedPadding: 0,
+        leadingWidget: isUser
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(right: 7),
+                child: SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: showAvatar ? avatar : null,
+                ),
+              ),
+        topWidget: showSenderName && !isUser
+            ? Padding(
+                padding: const EdgeInsets.only(left: 39, bottom: 3),
+                child: Text(
+                  senderName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11.5,
+                  ),
+                ),
+              )
+            : null,
+        child: _ChatBubble(
+          key: messageKey,
+          message: message,
+          timeLabel: timeLabel,
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatBubble extends StatelessWidget {
+  const _ChatBubble({super.key, required this.message, this.timeLabel = ''});
+
+  final ChatMessage message;
+  final String timeLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final palette = context.chatPalette;
+    final isUser = message.isUser;
     final hasImage = message.image != null;
     final isSticker = message.isSticker && hasImage;
     final waiting = !isUser && message.content.isEmpty && !hasImage;
+    final textColor = isUser ? palette.outgoingText : palette.incomingText;
+    final bubbleColor = isUser
+        ? palette.outgoingBubble
+        : palette.incomingBubble;
+    final bubbleRadius = BorderRadius.only(
+      topLeft: const Radius.circular(MoriRadius.bubble),
+      topRight: const Radius.circular(MoriRadius.bubble),
+      bottomLeft: Radius.circular(isUser ? MoriRadius.bubble : 5),
+      bottomRight: Radius.circular(isUser ? 5 : MoriRadius.bubble),
+    );
+    final metaColor = textColor.withValues(alpha: 0.56);
 
-    return GestureDetector(
-      onLongPress: onLongPress,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Row(
-          mainAxisAlignment: isUser
-              ? MainAxisAlignment.end
-              : MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!isUser) ...[avatar, const SizedBox(width: 8)],
-            Flexible(
-              child: Column(
-                crossAxisAlignment: isUser
-                    ? CrossAxisAlignment.end
-                    : CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (showSenderName && !isUser)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 2, bottom: 4),
-                      child: Text(
-                        senderName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
+    final bubble = isSticker
+        ? ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 154, maxHeight: 154),
+            child: Image.memory(
+              message.image!.bytes,
+              fit: BoxFit.contain,
+              semanticLabel: '表情包',
+              gaplessPlayback: true,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(MoriRadius.medium),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    MoriIcons.imageOff,
+                    color: colors.onSurfaceVariant,
+                  ),
+                );
+              },
+            ),
+          )
+        : Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.77,
+            ),
+            padding: hasImage
+                ? const EdgeInsets.all(4)
+                : const EdgeInsets.fromLTRB(12, 7, 12, 5),
+            decoration: BoxDecoration(
+              color: bubbleColor,
+              borderRadius: bubbleRadius,
+              border: isUser
+                  ? null
+                  : Border.all(color: palette.incomingBorder, width: 0.8),
+            ),
+            child: waiting
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 4,
+                    ),
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: textColor.withValues(alpha: 0.65),
                       ),
                     ),
-                  Container(
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-                    ),
-                    padding: isSticker
-                        ? EdgeInsets.zero
-                        : hasImage
-                        ? const EdgeInsets.all(6)
-                        : const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 11,
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (hasImage)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(
+                            MoriRadius.medium,
                           ),
-                    decoration: isSticker
-                        ? null
-                        : BoxDecoration(
-                            color: isUser
-                                ? colors.primary
-                                : colors.surfaceContainerHighest,
-                            borderRadius: BorderRadius.only(
-                              topLeft: const Radius.circular(18),
-                              topRight: const Radius.circular(18),
-                              bottomLeft: Radius.circular(isUser ? 18 : 4),
-                              bottomRight: Radius.circular(isUser ? 4 : 18),
-                            ),
-                          ),
-                    child: waiting
-                        ? SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: colors.onSurfaceVariant,
-                            ),
-                          )
-                        : isSticker
-                        ? ConstrainedBox(
+                          child: ConstrainedBox(
                             constraints: const BoxConstraints(
-                              maxWidth: 150,
-                              maxHeight: 150,
+                              maxWidth: 232,
+                              maxHeight: 300,
                             ),
                             child: Image.memory(
                               message.image!.bytes,
-                              fit: BoxFit.contain,
-                              semanticLabel: '表情包',
-                              gaplessPlayback: true,
+                              fit: BoxFit.cover,
+                              semanticLabel: '图片',
                               errorBuilder: (context, error, stackTrace) {
                                 return Container(
-                                  width: 120,
+                                  width: 180,
                                   height: 120,
-                                  color: colors.surfaceContainerHighest,
+                                  color: colors.surfaceContainerHigh,
                                   alignment: Alignment.center,
                                   child: Icon(
-                                    Icons.broken_image_outlined,
+                                    MoriIcons.imageOff,
                                     color: colors.onSurfaceVariant,
                                   ),
                                 );
                               },
                             ),
-                          )
-                        : Column(
-                            crossAxisAlignment: isUser
-                                ? CrossAxisAlignment.end
-                                : CrossAxisAlignment.start,
+                          ),
+                        ),
+                      if (message.content.isNotEmpty)
+                        Padding(
+                          padding: hasImage
+                              ? const EdgeInsets.fromLTRB(5, 7, 5, 1)
+                              : EdgeInsets.zero,
+                          child: MoriMessageText(
+                            text: message.content,
+                            isUser: isUser,
+                            baseStyle:
+                                (theme.textTheme.bodyLarge ?? const TextStyle())
+                                    .copyWith(
+                                      color: textColor,
+                                      height: 1.46,
+                                      fontSize: 15.5,
+                                      letterSpacing: 0.05,
+                                    ),
+                          ),
+                        ),
+                      if (timeLabel.isNotEmpty)
+                        Padding(
+                          padding: EdgeInsets.only(
+                            top: message.content.isNotEmpty ? 3 : 1,
+                            right: 1,
+                          ),
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              if (hasImage)
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 220,
-                                      maxHeight: 280,
-                                    ),
-                                    child: Image.memory(
-                                      message.image!.bytes,
-                                      fit: BoxFit.cover,
-                                      semanticLabel: '图片',
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
-                                            return Container(
-                                              width: 180,
-                                              height: 120,
-                                              color: colors
-                                                  .surfaceContainerHighest,
-                                              alignment: Alignment.center,
-                                              child: Icon(
-                                                Icons.broken_image_outlined,
-                                                color: colors.onSurfaceVariant,
-                                              ),
-                                            );
-                                          },
-                                    ),
-                                  ),
+                              Text(
+                                timeLabel,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: metaColor,
+                                  fontSize: 10.4,
+                                  height: 1.1,
                                 ),
-                              if (message.content.isNotEmpty)
-                                Padding(
-                                  padding: hasImage
-                                      ? const EdgeInsets.fromLTRB(6, 8, 6, 2)
-                                      : EdgeInsets.zero,
-                                  child: Text(
-                                    message.content,
-                                    style: theme.textTheme.bodyLarge?.copyWith(
-                                      color: isUser
-                                          ? colors.onPrimary
-                                          : colors.onSurface,
-                                      height: 1.45,
-                                    ),
-                                  ),
+                              ),
+                              if (isUser) ...[
+                                const SizedBox(width: 3),
+                                Icon(
+                                  MoriIcons.check,
+                                  size: 11,
+                                  color: metaColor,
                                 ),
+                              ],
                             ],
                           ),
+                        ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            if (isUser) ...[const SizedBox(width: 8), avatar],
-          ],
-        ),
-      ),
-    );
+          );
+
+    return bubble;
   }
 }

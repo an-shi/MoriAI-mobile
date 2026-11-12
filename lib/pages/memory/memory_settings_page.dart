@@ -6,6 +6,9 @@ import 'package:mori_ai/models/memory.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/memory_service.dart';
 import 'package:mori_ai/services/memory_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/number_setting_field.dart';
 
@@ -103,9 +106,9 @@ class _MemorySettingsPageState extends State<MemorySettingsPage> {
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('取消'),
           ),
-          FilledButton(
+          MoriDangerButton(
+            label: '清空',
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('清空'),
           ),
         ],
       ),
@@ -140,225 +143,146 @@ class _MemorySettingsPageState extends State<MemorySettingsPage> {
         builder: (context, _) {
           final settings = MemoryStore.instance.settings.value;
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            padding: MoriTheme.pagePadding,
             children: [
-              Card(
-                elevation: 0,
-                color: colors.surfaceContainerLow,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    SwitchListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 4,
-                      ),
-                      secondary: Icon(
-                        Icons.psychology_outlined,
-                        color: colors.primary,
-                      ),
-                      title: const Text('启用长期记忆'),
-                      subtitle: const Text('关闭后不自动整理记忆，也不会在聊天里召回记忆。'),
-                      value: settings.enabled,
-                      onChanged: (value) {
-                        unawaited(_save(settings.copyWith(enabled: value)));
-                      },
-                    ),
-                    Divider(
-                      height: 1,
-                      indent: 16,
-                      endIndent: 16,
-                      color: colors.outlineVariant,
-                    ),
-                    SwitchListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 4,
-                      ),
-                      secondary: Icon(
-                        Icons.auto_fix_high_outlined,
-                        color: colors.primary,
-                      ),
-                      title: const Text('自动整理记忆'),
-                      subtitle: const Text('聊天闲置一段时间后，从单聊里提炼值得长期记住的事。'),
-                      value: settings.autoExtract,
-                      onChanged: settings.enabled
-                          ? (value) {
-                              unawaited(
-                                _save(settings.copyWith(autoExtract: value)),
-                              );
-                            }
-                          : null,
-                    ),
-                    Divider(
-                      height: 1,
-                      indent: 16,
-                      endIndent: 16,
-                      color: colors.outlineVariant,
-                    ),
-                    SwitchListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 4,
-                      ),
-                      secondary: Icon(
-                        Icons.groups_2_outlined,
-                        color: colors.primary,
-                      ),
-                      title: const Text('启用群聊公共记忆'),
-                      subtitle: const Text('整理群公共记忆和群印象，只在对应群聊里召回。'),
-                      value: settings.groupMemoryEnabled,
-                      onChanged: settings.enabled
-                          ? (value) {
-                              unawaited(
-                                _save(
-                                  settings.copyWith(groupMemoryEnabled: value),
-                                ),
-                              );
-                            }
-                          : null,
-                    ),
-                  ],
-                ),
+              const MoriPageIntro(
+                text: '长期记忆会从单聊里提炼值得记住的事，并在合适的对话里自然召回。群聊不会读取单聊记忆。',
               ),
-              const SizedBox(height: 12),
-              Card(
-                elevation: 0,
-                color: colors.surfaceContainerLow,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                  child: Column(
-                    children: [
-                      NumberSettingField(
-                        label: '每次召回条数',
-                        value: settings.recallCount,
-                        min: 0,
-                        helperText: '0 表示不在聊天中召回；最多 20 条，避免占用过多上下文。',
-                        onChanged: (value) {
-                          unawaited(
-                            _save(settings.copyWith(recallCount: value)),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      NumberSettingField(
-                        label: '自动整理闲置时间（分钟）',
-                        value: settings.extractIdleMinutes,
-                        min: 1,
-                        helperText: '聊天停止这么久后，才会开始整理记忆。',
-                        onChanged: (value) {
-                          unawaited(
-                            _save(settings.copyWith(extractIdleMinutes: value)),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      NumberSettingField(
-                        label: '自动整理最少消息数',
-                        value: settings.extractMinMessages,
-                        min: 2,
-                        helperText: '新聊天达到这么多条后才会调用模型整理。',
-                        onChanged: (value) {
-                          unawaited(
-                            _save(settings.copyWith(extractMinMessages: value)),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      NumberSettingField(
-                        label: '每个角色最多记忆数',
-                        value: settings.maxMemoriesPerCharacter,
-                        min: 10,
-                        helperText: '超过后会优先清理低重要性的自动记忆。',
-                        onChanged: (value) {
-                          unawaited(
-                            _save(
-                              settings.copyWith(maxMemoriesPerCharacter: value),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+              MoriSectionHeader(
+                label: '记忆功能',
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+              ),
+              MoriSettingsGroup(
+                children: [
+                  MoriSettingsSwitchTile(
+                    icon: MoriIcons.brain,
+                    title: '启用长期记忆',
+                    subtitle: '关闭后不自动整理记忆，也不会在聊天里召回记忆。',
+                    value: settings.enabled,
+                    onChanged: (value) {
+                      unawaited(_save(settings.copyWith(enabled: value)));
+                    },
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '手动操作',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Card(
-                elevation: 0,
-                color: colors.surfaceContainerLow,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 6,
-                      ),
-                      leading: Icon(
-                        Icons.auto_fix_high_outlined,
-                        color: colors.primary,
-                      ),
-                      title: const Text('立即整理记忆'),
-                      subtitle: const Text('不等聊天闲置，马上整理一个角色的近期聊天'),
-                      trailing: _extracting
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
+                  MoriSettingsSwitchTile(
+                    icon: MoriIcons.autoFix,
+                    title: '自动整理记忆',
+                    subtitle: '聊天闲置一段时间后，从单聊里提炼值得长期记住的事。',
+                    value: settings.autoExtract,
+                    onChanged: settings.enabled
+                        ? (value) {
+                            unawaited(
+                              _save(settings.copyWith(autoExtract: value)),
+                            );
+                          }
+                        : null,
+                  ),
+                  MoriSettingsSwitchTile(
+                    icon: MoriIcons.groupRound,
+                    title: '启用群聊公共记忆',
+                    subtitle: '整理群公共记忆和群印象，只在对应群聊里召回。',
+                    value: settings.groupMemoryEnabled,
+                    onChanged: settings.enabled
+                        ? (value) {
+                            unawaited(
+                              _save(
+                                settings.copyWith(groupMemoryEnabled: value),
                               ),
-                            )
-                          : const Icon(Icons.chevron_right_rounded),
-                      onTap: _extracting ? null : _extractNow,
-                    ),
-                    Divider(
-                      height: 1,
-                      indent: 72,
-                      endIndent: 16,
-                      color: colors.outlineVariant,
-                    ),
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 6,
-                      ),
-                      leading: Icon(
-                        Icons.delete_sweep_outlined,
-                        color: colors.error,
-                      ),
-                      title: Text(
-                        '清空某个角色的记忆',
-                        style: TextStyle(color: colors.error),
-                      ),
-                      subtitle: const Text('删除后无法恢复'),
-                      onTap: _clearForCharacter,
-                    ),
-                  ],
-                ),
+                            );
+                          }
+                        : null,
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
+              MoriSectionHeader(label: '整理与召回'),
+              MoriSettingsGroup(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                children: [
+                  NumberSettingField(
+                    label: '每次召回条数',
+                    value: settings.recallCount,
+                    min: 0,
+                    helperText: '0 表示不在聊天中召回；最多 20 条，避免占用过多上下文。',
+                    onChanged: (value) {
+                      unawaited(_save(settings.copyWith(recallCount: value)));
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  NumberSettingField(
+                    label: '自动整理闲置时间（分钟）',
+                    value: settings.extractIdleMinutes,
+                    min: 1,
+                    helperText: '聊天停止这么久后，才会开始整理记忆。',
+                    onChanged: (value) {
+                      unawaited(
+                        _save(settings.copyWith(extractIdleMinutes: value)),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  NumberSettingField(
+                    label: '自动整理最少消息数',
+                    value: settings.extractMinMessages,
+                    min: 2,
+                    helperText: '新聊天达到这么多条后才会调用模型整理。',
+                    onChanged: (value) {
+                      unawaited(
+                        _save(settings.copyWith(extractMinMessages: value)),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  NumberSettingField(
+                    label: '每个角色最多记忆数',
+                    value: settings.maxMemoriesPerCharacter,
+                    min: 10,
+                    helperText: '超过后会优先清理低重要性的自动记忆。',
+                    onChanged: (value) {
+                      unawaited(
+                        _save(
+                          settings.copyWith(maxMemoriesPerCharacter: value),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              const MoriSectionHeader(label: '手动操作'),
+              MoriSettingsGroup(
+                children: [
+                  MoriSettingsTile(
+                    icon: MoriIcons.autoFix,
+                    title: '立即整理记忆',
+                    subtitle: '不等聊天闲置，马上整理一个角色的近期聊天',
+                    showChevron: false,
+                    trailing: _extracting
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          )
+                        : Icon(
+                            MoriIcons.chevron,
+                            size: 18,
+                            color: colors.onSurfaceVariant,
+                          ),
+                    onTap: _extracting ? null : _extractNow,
+                  ),
+                  MoriSettingsTile(
+                    icon: MoriIcons.erase,
+                    title: '清空某个角色的记忆',
+                    subtitle: '删除后无法恢复',
+                    danger: true,
+                    showChevron: false,
+                    onTap: _clearForCharacter,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
               Text(
-                '记忆只从单聊提炼，群聊不会读取单聊记忆。自动整理会调用当前模型；'
-                '关闭自动整理后仍然可以手动整理。删除角色卡时会同步删除该角色的记忆。',
+                '自动整理会调用当前模型；关闭自动整理后仍然可以手动整理。删除角色卡时会同步删除该角色的记忆。',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: colors.onSurfaceVariant,
+                  height: 1.55,
                 ),
               ),
             ],

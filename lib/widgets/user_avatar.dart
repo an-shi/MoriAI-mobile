@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:mori_ai/models/user_profile.dart';
 import 'package:mori_ai/services/avatar_store.dart';
+import 'package:mori_ai/widgets/avatar_fallback.dart';
 
 class UserAvatar extends StatelessWidget {
   const UserAvatar({
@@ -20,22 +21,15 @@ class UserAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final file = forceFallback
         ? null
         : AvatarStore.instance.fileFor(profile.avatar);
     final cacheWidth = (size * MediaQuery.devicePixelRatioOf(context)).round();
 
-    final fallback = Container(
-      width: size,
-      height: size,
-      color: colors.secondaryContainer,
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.person_rounded,
-        size: size * 0.55,
-        color: colors.onSecondaryContainer,
-      ),
+    final fallback = AvatarFallback(
+      label: profile.displayName,
+      seed: profile.name,
+      size: size,
     );
 
     final Widget image;

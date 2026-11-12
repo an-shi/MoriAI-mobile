@@ -6,6 +6,9 @@ import 'package:mori_ai/models/proactive_message_settings.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/number_setting_field.dart';
 
@@ -156,7 +159,7 @@ class _ProactiveMessageSettingsPageState
                     leading: CharacterAvatar(character: card, size: 40),
                     title: Text(card.displayName),
                     subtitle: Text(card.type.label),
-                    trailing: const Icon(Icons.chevron_right_rounded),
+                    trailing: const Icon(MoriIcons.chevron),
                     onTap: () => Navigator.of(sheetContext).pop(card),
                   ),
               ],
@@ -242,106 +245,71 @@ class _ProactiveMessageSettingsPageState
     return Scaffold(
       appBar: AppBar(title: const Text('自动消息')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        padding: MoriTheme.pagePadding,
         children: [
-          Text(
-            '让角色在你沉默一段时间后主动找你，也可以在每天的固定时间发来问候。',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
+          const MoriPageIntro(
+            text: '让角色在你沉默一段时间后主动找你，也可以在每天的固定时间发来问候。自动消息只会在应用打开或从后台恢复时触发。',
           ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 0,
-            color: colors.surfaceContainerLow,
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              children: [
-                SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  title: const Text('启用自动消息'),
-                  subtitle: const Text('开启后，所有单聊角色都可能主动发消息'),
-                  value: _settings.enabled,
-                  onChanged: (value) =>
-                      _updateAndSave(_settings.copyWith(enabled: value)),
-                ),
-                Divider(
-                  height: 1,
-                  indent: 16,
-                  endIndent: 16,
-                  color: colors.outlineVariant,
-                ),
-                SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  title: const Text('本地通知'),
-                  subtitle: const Text('角色主动发消息时发送系统通知，并在会话列表显示未读红点'),
-                  value: _settings.notificationsEnabled,
-                  onChanged: _settings.enabled
-                      ? (value) => _updateAndSave(
-                          _settings.copyWith(notificationsEnabled: value),
-                        )
-                      : null,
-                ),
-                Divider(
-                  height: 1,
-                  indent: 16,
-                  endIndent: 16,
-                  color: colors.outlineVariant,
-                ),
-                SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  title: const Text('目的引擎（实验性）'),
-                  subtitle: const Text('开启后沉默搭话会先多调用一次模型选择目的；默认关闭。'),
-                  value: _settings.purposeEnabled,
-                  onChanged: _settings.enabled
-                      ? (value) => _updateAndSave(
-                          _settings.copyWith(purposeEnabled: value),
-                        )
-                      : null,
-                ),
-              ],
-            ),
+          MoriSectionHeader(
+            label: '总开关',
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
           ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 0,
-            color: colors.surfaceContainerLow,
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 6,
+          MoriSettingsGroup(
+            children: [
+              MoriSettingsSwitchTile(
+                icon: MoriIcons.bell,
+                title: '启用自动消息',
+                subtitle: '开启后，所有单聊角色都可能主动发消息',
+                value: _settings.enabled,
+                onChanged: (value) =>
+                    _updateAndSave(_settings.copyWith(enabled: value)),
               ),
-              leading: Icon(
-                Icons.monitor_heart_outlined,
-                color: colors.primary,
+              MoriSettingsSwitchTile(
+                icon: MoriIcons.bell,
+                title: '本地通知',
+                subtitle: '角色主动发消息时发送系统通知，并在会话列表显示未读红点',
+                value: _settings.notificationsEnabled,
+                onChanged: _settings.enabled
+                    ? (value) => _updateAndSave(
+                        _settings.copyWith(notificationsEnabled: value),
+                      )
+                    : null,
               ),
-              title: const Text('运行诊断'),
-              subtitle: const Text('检查自动消息为什么没有触发'),
-              trailing: _diagnosing
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.chevron_right_rounded),
-              onTap: _diagnosing ? null : _openDiagnostics,
-            ),
+              MoriSettingsSwitchTile(
+                icon: MoriIcons.sparkles,
+                title: '目的引擎（实验性）',
+                subtitle: '开启后沉默搭话会先多调用一次模型选择目的；默认关闭。',
+                value: _settings.purposeEnabled,
+                onChanged: _settings.enabled
+                    ? (value) => _updateAndSave(
+                        _settings.copyWith(purposeEnabled: value),
+                      )
+                    : null,
+              ),
+            ],
+          ),
+          const MoriSectionHeader(label: '状态与测试'),
+          MoriSettingsGroup(
+            children: [
+              MoriSettingsTile(
+                icon: MoriIcons.heartPulse,
+                title: '运行诊断',
+                subtitle: '检查自动消息为什么没有触发',
+                showChevron: false,
+                trailing: _diagnosing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        MoriIcons.chevron,
+                        size: 18,
+                        color: colors.onSurfaceVariant,
+                      ),
+                onTap: _diagnosing ? null : _openDiagnostics,
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           _SettingsCard(
@@ -451,7 +419,7 @@ class _ProactiveMessageSettingsPageState
                             : null,
                       ),
                     ActionChip(
-                      avatar: const Icon(Icons.add_rounded, size: 18),
+                      avatar: const Icon(MoriIcons.plus, size: 18),
                       label: const Text('添加时间'),
                       onPressed: _settings.scheduledEnabled
                           ? _addScheduledTime
@@ -501,7 +469,7 @@ class _ProactiveMessageSettingsPageState
                         onPressed: _settings.quietHoursEnabled
                             ? () => _pickQuietTime(start: true)
                             : null,
-                        icon: const Icon(Icons.bedtime_outlined, size: 18),
+                        icon: const Icon(MoriIcons.moonDark, size: 18),
                         label: Text(
                           '开始 '
                           '${ProactiveMessageSettings.formatTimeOfDay(_settings.quietStartMinutes)}',
@@ -514,7 +482,7 @@ class _ProactiveMessageSettingsPageState
                         onPressed: _settings.quietHoursEnabled
                             ? () => _pickQuietTime(start: false)
                             : null,
-                        icon: const Icon(Icons.wb_sunny_outlined, size: 18),
+                        icon: const Icon(MoriIcons.sun, size: 18),
                         label: Text(
                           '结束 '
                           '${ProactiveMessageSettings.formatTimeOfDay(_settings.quietEndMinutes)}',
@@ -575,13 +543,13 @@ class _ProactiveMessageSettingsPageState
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.send_outlined),
+                : const Icon(MoriIcons.send, size: 17),
             label: Text(_testing ? '正在发送…' : '立即让角色发一条'),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: _reset,
-            icon: const Icon(Icons.restart_alt_rounded),
+            icon: const Icon(MoriIcons.reset, size: 17),
             label: const Text('恢复默认设置'),
           ),
           const SizedBox(height: 12),
@@ -634,15 +602,10 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-        child: child,
-      ),
+    return MoriSettingsGroup(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      children: [child],
     );
   }
 }
@@ -720,7 +683,7 @@ class _DiagnosticsSheetState extends State<_DiagnosticsSheet> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.refresh_rounded, size: 18),
+                      : const Icon(MoriIcons.refresh, size: 18),
                   label: Text(_checking ? '检查中…' : '立即检查一次'),
                 ),
               ],
@@ -903,9 +866,7 @@ class _DiagnosticRow extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            ok
-                ? Icons.check_circle_outline_rounded
-                : Icons.info_outline_rounded,
+            ok ? MoriIcons.checkCircleOutline : MoriIcons.info,
             size: 16,
             color: ok ? colors.primary : colors.onSurfaceVariant,
           ),

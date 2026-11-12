@@ -92,8 +92,7 @@ class _NumberSettingFieldState extends State<NumberSettingField> {
       decoration: InputDecoration(
         labelText: widget.label,
         helperText: widget.helperText,
-        helperMaxLines: 2,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        helperMaxLines: 3,
       ),
       onSubmitted: (_) => _commit(),
       onTapOutside: (_) {

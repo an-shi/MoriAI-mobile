@@ -3,6 +3,7 @@ import 'package:mori_ai/models/group_profile.dart';
 import 'package:mori_ai/pages/chat_page.dart';
 import 'package:mori_ai/pages/group/group_settings_page.dart';
 import 'package:mori_ai/services/group_store.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
 import 'package:mori_ai/widgets/group_avatar.dart';
 
 class GroupChatDetailPage extends StatelessWidget {
@@ -27,10 +28,10 @@ class GroupChatDetailPage extends StatelessWidget {
 
         return Scaffold(
           appBar: AppBar(
-            titleSpacing: 0,
+            titleSpacing: 2,
             title: Row(
               children: [
-                GroupAvatar(group: current, size: 30),
+                GroupAvatar(group: current, size: 34),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -43,12 +44,16 @@ class GroupChatDetailPage extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
+                          fontSize: 16.5,
+                          letterSpacing: -0.1,
                         ),
                       ),
+                      const SizedBox(height: 1),
                       Text(
                         '${current.memberIds.length} 位成员',
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 11.5,
                         ),
                       ),
                     ],
@@ -66,7 +71,7 @@ class GroupChatDetailPage extends StatelessWidget {
                   );
                 },
                 tooltip: '群聊设置',
-                icon: const Icon(Icons.more_horiz_rounded),
+                icon: const Icon(MoriIcons.more),
               ),
             ],
           ),

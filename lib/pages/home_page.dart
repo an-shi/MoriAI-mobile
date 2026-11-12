@@ -13,6 +13,7 @@ import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/local_notification_service.dart';
 import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
 import 'package:mori_ai/widgets/user_avatar.dart';
 import 'package:mori_ai/widgets/user_profile_drawer.dart';
 
@@ -124,16 +125,17 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildAddAction() {
     return PopupMenuButton<String>(
-      icon: const Icon(Icons.add_rounded),
+      icon: const Icon(MoriIcons.plus, size: 23),
       tooltip: '更多',
+      splashRadius: 22,
       onSelected: _handleAddMenu,
       itemBuilder: (context) => const [
         PopupMenuItem<String>(
           value: 'group',
           child: Row(
             children: [
-              Icon(Icons.group_add_outlined),
-              SizedBox(width: 10),
+              Icon(MoriIcons.groupAdd, size: 18),
+              SizedBox(width: 12),
               Text('新建群聊'),
             ],
           ),
@@ -146,27 +148,24 @@ class _HomePageState extends State<HomePage> {
     return ValueListenableBuilder<UserProfile>(
       valueListenable: UserProfileStore.instance.profile,
       builder: (context, profile, _) {
+        final colors = Theme.of(context).colorScheme;
         return Tooltip(
           message: '个人资料',
           child: InkWell(
             borderRadius: BorderRadius.circular(24),
             onTap: () => _scaffoldKey.currentState?.openDrawer(),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  UserAvatar(profile: profile, size: 30),
-                  const SizedBox(width: 6),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 64),
-                    child: Text(
-                      profile.displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+              padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+              child: Container(
+                padding: const EdgeInsets.all(1.5),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: colors.primary.withValues(alpha: 0.28),
+                    width: 1.2,
                   ),
-                ],
+                ),
+                child: UserAvatar(profile: profile, size: 32),
               ),
             ),
           ),
@@ -179,11 +178,12 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     final unread = UnreadStore.instance.totalCount;
+    final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        leadingWidth: _isChatTab ? 132 : null,
+        leadingWidth: _isChatTab ? 64 : null,
         leading: _isChatTab ? _buildUserAction() : null,
         title: Text(_titles[_currentIndex]),
         centerTitle: false,
@@ -198,39 +198,49 @@ class _HomePageState extends State<HomePage> {
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: keyboardVisible
           ? null
-          : NavigationBar(
-              selectedIndex: _currentIndex,
-              onDestinationSelected: (index) {
-                if (index == _currentIndex) {
-                  return;
-                }
-                setState(() => _currentIndex = index);
-              },
-              destinations: [
-                NavigationDestination(
-                  icon: Badge(
-                    isLabelVisible: unread > 0,
-                    label: Text(unread > 99 ? '99+' : '$unread'),
-                    child: const Icon(Icons.chat_bubble_outline_rounded),
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: colors.outlineVariant.withValues(alpha: 0.7),
+                    width: 0.8,
                   ),
-                  selectedIcon: Badge(
-                    isLabelVisible: unread > 0,
-                    label: Text(unread > 99 ? '99+' : '$unread'),
-                    child: const Icon(Icons.chat_bubble_rounded),
+                ),
+              ),
+              child: NavigationBar(
+                selectedIndex: _currentIndex,
+                onDestinationSelected: (index) {
+                  if (index == _currentIndex) {
+                    return;
+                  }
+                  setState(() => _currentIndex = index);
+                },
+                destinations: [
+                  NavigationDestination(
+                    icon: Badge(
+                      isLabelVisible: unread > 0,
+                      label: Text(unread > 99 ? '99+' : '$unread'),
+                      child: const Icon(MoriIcons.chat),
+                    ),
+                    selectedIcon: Badge(
+                      isLabelVisible: unread > 0,
+                      label: Text(unread > 99 ? '99+' : '$unread'),
+                      child: const Icon(MoriIcons.chat),
+                    ),
+                    label: '对话',
                   ),
-                  label: '对话',
-                ),
-                const NavigationDestination(
-                  icon: Icon(Icons.auto_stories_outlined),
-                  selectedIcon: Icon(Icons.auto_stories_rounded),
-                  label: '记忆与角色卡',
-                ),
-                const NavigationDestination(
-                  icon: Icon(Icons.dynamic_feed_outlined),
-                  selectedIcon: Icon(Icons.dynamic_feed_rounded),
-                  label: '动态',
-                ),
-              ],
+                  const NavigationDestination(
+                    icon: Icon(MoriIcons.memory),
+                    selectedIcon: Icon(MoriIcons.memory),
+                    label: '记忆与角色卡',
+                  ),
+                  const NavigationDestination(
+                    icon: Icon(MoriIcons.moments),
+                    selectedIcon: Icon(MoriIcons.moments),
+                    label: '动态',
+                  ),
+                ],
+              ),
             ),
     );
   }

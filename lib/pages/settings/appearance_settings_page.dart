@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mori_ai/services/theme_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 
 class AppearanceSettingsPage extends StatelessWidget {
   const AppearanceSettingsPage({super.key});
@@ -7,19 +10,19 @@ class AppearanceSettingsPage extends StatelessWidget {
   static const _options = [
     _ThemeOption(
       mode: ThemeMode.system,
-      icon: Icons.brightness_auto_rounded,
+      icon: MoriIcons.sunMoon,
       title: '跟随系统',
       subtitle: '根据系统设置自动切换浅色或深色',
     ),
     _ThemeOption(
       mode: ThemeMode.light,
-      icon: Icons.light_mode_rounded,
+      icon: MoriIcons.sun,
       title: '浅色模式',
       subtitle: '始终使用浅色外观',
     ),
     _ThemeOption(
       mode: ThemeMode.dark,
-      icon: Icons.dark_mode_rounded,
+      icon: MoriIcons.moonDark,
       title: '深色模式',
       subtitle: '始终使用深色外观',
     ),
@@ -49,39 +52,52 @@ class AppearanceSettingsPage extends StatelessWidget {
         valueListenable: ThemeStore.instance.themeMode,
         builder: (context, currentMode, _) {
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            padding: MoriTheme.pagePadding,
             children: [
-              Text(
-                '选择 Mori 的显示方式',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
+              const MoriPageIntro(
+                text: '选择 Mori 的显示方式。薄荷绿与奶白色会在浅色模式下呈现，深色模式则使用柔和的墨绿色。',
               ),
-              const SizedBox(height: 12),
-              Card(
-                elevation: 0,
-                color: colors.surfaceContainerLow,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    for (var index = 0; index < _options.length; index++) ...[
-                      if (index > 0)
-                        Divider(
-                          height: 1,
-                          indent: 16,
-                          endIndent: 16,
-                          color: colors.outlineVariant,
-                        ),
-                      _ThemeOptionTile(
-                        option: _options[index],
-                        selected: currentMode == _options[index].mode,
-                        onTap: () => _select(context, _options[index].mode),
-                      ),
-                    ],
-                  ],
+              const MoriSectionHeader(
+                label: '主题',
+                padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
+              ),
+              MoriSettingsGroup(
+                children: [
+                  for (final option in _options)
+                    MoriSettingsTile(
+                      icon: option.icon,
+                      title: option.title,
+                      subtitle: option.subtitle,
+                      showChevron: false,
+                      trailing: currentMode == option.mode
+                          ? Icon(
+                              MoriIcons.checkCircle,
+                              size: 20,
+                              color: colors.primary,
+                            )
+                          : SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: colors.outlineVariant,
+                                    width: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ),
+                      onTap: () => _select(context, option.mode),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '深色模式也会保留薄荷绿作为强调色，并降低背景亮度以减少夜间眩光。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                  height: 1.55,
                 ),
               ),
             ],
@@ -104,36 +120,4 @@ class _ThemeOption {
   final IconData icon;
   final String title;
   final String subtitle;
-}
-
-class _ThemeOptionTile extends StatelessWidget {
-  const _ThemeOptionTile({
-    required this.option,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final _ThemeOption option;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: Icon(
-        option.icon,
-        color: selected ? colors.primary : colors.onSurfaceVariant,
-      ),
-      title: Text(option.title),
-      subtitle: Text(option.subtitle),
-      trailing: selected
-          ? Icon(Icons.check_circle_rounded, color: colors.primary)
-          : const SizedBox(width: 24),
-      selected: selected,
-      onTap: onTap,
-    );
-  }
 }

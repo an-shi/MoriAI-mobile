@@ -5,6 +5,9 @@ import 'package:mori_ai/models/model_settings.dart';
 import 'package:mori_ai/services/api_key_store.dart';
 import 'package:mori_ai/services/model_list_service.dart';
 import 'package:mori_ai/services/model_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 
 class ModelSettingsPage extends StatefulWidget {
   const ModelSettingsPage({super.key});
@@ -390,9 +393,9 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('取消'),
             ),
-            FilledButton(
+            MoriDangerButton(
+              label: '删除',
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('删除'),
             ),
           ],
         );
@@ -436,225 +439,219 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
           ModelStore.instance.activePresetId,
         ]),
         builder: (context, _) {
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-            children: [
-              Card(
-                elevation: 0,
-                color: colors.surfaceContainerLow,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+          return SingleChildScrollView(
+            padding: MoriTheme.pagePadding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const MoriPageIntro(
+                  text: '为 Mori 连接一个模型供应商。API Key 只保存在本机安全存储中，不会上传到其他服务。',
                 ),
-                child: Padding(
+                MoriSettingsGroup(
                   padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.memory_rounded, color: colors.primary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '模型配置',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const _ActivePresetBadge(),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '选择供应商和模型。模型列表会通过供应商官方接口获取。',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('provider-$_providerId'),
-                        initialValue: _providerId,
-                        isExpanded: true,
-                        decoration: InputDecoration(
-                          labelText: '模型供应商',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        items: [
-                          for (final provider in ModelProviderCatalog.all)
-                            DropdownMenuItem<String>(
-                              value: provider.id,
-                              child: Text(provider.name),
-                            ),
-                        ],
-                        onChanged: _changeProvider,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _provider.description,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              key: ValueKey('model-$_providerId-$_modelId'),
-                              initialValue: _modelId.isEmpty ? null : _modelId,
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                labelText: '模型',
-                                hintText: _loadingModels
-                                    ? '正在获取模型列表…'
-                                    : '请选择模型',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            MoriIconBadge(icon: MoriIcons.cpu, size: 36),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                '模型配置',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              items: [
-                                for (final model in _modelOptions)
-                                  DropdownMenuItem<String>(
-                                    value: model.id,
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            model.displayName,
-                                            overflow: TextOverflow.ellipsis,
+                            ),
+                            const _ActivePresetBadge(),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '选择供应商和模型。模型列表会通过供应商官方接口获取。',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        DropdownButtonFormField<String>(
+                          key: ValueKey('provider-$_providerId'),
+                          initialValue: _providerId,
+                          isExpanded: true,
+                          decoration: const InputDecoration(labelText: '模型供应商'),
+                          items: [
+                            for (final provider in ModelProviderCatalog.all)
+                              DropdownMenuItem<String>(
+                                value: provider.id,
+                                child: Text(provider.name),
+                              ),
+                          ],
+                          onChanged: _changeProvider,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _provider.description,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                key: ValueKey('model-$_providerId-$_modelId'),
+                                initialValue: _modelId.isEmpty
+                                    ? null
+                                    : _modelId,
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  labelText: '模型',
+                                  hintText: _loadingModels
+                                      ? '正在获取模型列表…'
+                                      : '请选择模型',
+                                ),
+                                items: [
+                                  for (final model in _modelOptions)
+                                    DropdownMenuItem<String>(
+                                      value: model.id,
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              model.displayName,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
-                                        ),
-                                        if (model.supportsVision) ...[
-                                          const SizedBox(width: 8),
-                                          Icon(
-                                            Icons.image_outlined,
-                                            size: 16,
-                                            color: colors.primary,
-                                          ),
+                                          if (model.supportsVision) ...[
+                                            const SizedBox(width: 8),
+                                            Icon(
+                                              MoriIcons.image,
+                                              size: 16,
+                                              color: colors.primary,
+                                            ),
+                                          ],
                                         ],
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                              ],
-                              onChanged: _modelOptions.isEmpty
-                                  ? null
-                                  : _changeModel,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton.filledTonal(
-                            onPressed: _loadingModels ? null : _loadModels,
-                            tooltip: '刷新模型列表',
-                            icon: _loadingModels
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.refresh_rounded),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _modelHelperText,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: _modelsError != null
-                              ? colors.error
-                              : colors.onSurfaceVariant,
-                        ),
-                      ),
-                      Divider(height: 32, color: colors.outlineVariant),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.key_rounded,
-                            size: 20,
-                            color: colors.primary,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '${_provider.name} API Key',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
+                                ],
+                                onChanged: _modelOptions.isEmpty
+                                    ? null
+                                    : _changeModel,
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            IconButton.filledTonal(
+                              onPressed: _loadingModels ? null : _loadModels,
+                              tooltip: '刷新模型列表',
+                              icon: _loadingModels
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(MoriIcons.refresh),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _modelHelperText,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: _modelsError != null
+                                ? colors.error
+                                : colors.onSurfaceVariant,
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
+                        ),
+                        Divider(height: 32, color: colors.outlineVariant),
+                        Row(
+                          children: [
+                            Icon(
+                              MoriIcons.key,
+                              size: 20,
+                              color: colors.primary,
                             ),
-                            decoration: BoxDecoration(
-                              color: _hasSavedKey
-                                  ? colors.primaryContainer
-                                  : colors.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(999),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '${_provider.name} API Key',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
-                            child: Text(
-                              _hasSavedKey ? '已配置' : '未配置',
-                              style: theme.textTheme.labelSmall?.copyWith(
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
                                 color: _hasSavedKey
-                                    ? colors.onPrimaryContainer
-                                    : colors.onSurfaceVariant,
+                                    ? colors.primaryContainer
+                                    : colors.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                _hasSavedKey ? '已配置' : '未配置',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: _hasSavedKey
+                                      ? colors.onPrimaryContainer
+                                      : colors.onSurfaceVariant,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'API Key 仅保存在本机安全存储中。每个供应商的 Key 分开保存，切换模型或预设时无需重新填写。',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _apiKeyController,
-                        obscureText: _obscureKey,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        smartDashesType: SmartDashesType.disabled,
-                        smartQuotesType: SmartQuotesType.disabled,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) {
-                          if (!_savingKey) {
-                            _saveApiKey();
-                          }
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'API Key',
-                          hintText: _provider.apiKeyHint,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                        const SizedBox(height: 8),
+                        Text(
+                          'API Key 仅保存在本机安全存储中。每个供应商的 Key 分开保存，切换模型或预设时无需重新填写。',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
                           ),
-                          suffixIcon: IconButton(
-                            onPressed: () {
-                              setState(() => _obscureKey = !_obscureKey);
-                            },
-                            icon: Icon(
-                              _obscureKey
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _apiKeyController,
+                          obscureText: _obscureKey,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          smartDashesType: SmartDashesType.disabled,
+                          smartQuotesType: SmartQuotesType.disabled,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) {
+                            if (!_savingKey) {
+                              _saveApiKey();
+                            }
+                          },
+                          decoration: InputDecoration(
+                            labelText: 'API Key',
+                            hintText: _provider.apiKeyHint,
+                            suffixIcon: IconButton(
+                              onPressed: () {
+                                setState(() => _obscureKey = !_obscureKey);
+                              },
+                              icon: Icon(
+                                _obscureKey ? MoriIcons.eye : MoriIcons.eyeOff,
+                                size: 20,
+                              ),
+                              tooltip: _obscureKey ? '显示' : '隐藏',
                             ),
-                            tooltip: _obscureKey ? '显示' : '隐藏',
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: FilledButton(
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            if (_hasSavedKey)
+                              TextButton(
+                                onPressed: _savingKey ? null : _clearApiKey,
+                                child: const Text('清除'),
+                              ),
+                            const Spacer(),
+                            FilledButton(
                               onPressed: _savingKey ? null : _saveApiKey,
                               child: _savingKey
                                   ? const SizedBox(
@@ -666,23 +663,16 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
                                     )
                                   : const Text('保存 API Key'),
                             ),
-                          ),
-                          if (_hasSavedKey) ...[
-                            const SizedBox(width: 8),
-                            TextButton(
-                              onPressed: _savingKey ? null : _clearApiKey,
-                              child: const Text('清除'),
-                            ),
                           ],
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              _buildPresetCard(theme, colors),
-            ],
+                const SizedBox(height: 16),
+                _buildPresetCard(theme, colors),
+              ],
+            ),
           );
         },
       ),
@@ -693,121 +683,120 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
     final presets = ModelStore.instance.presets.value;
     final activeId = ModelStore.instance.activePresetId.value;
 
-    return Card(
-      elevation: 0,
-      color: colors.surfaceContainerLow,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                Icon(Icons.bookmarks_rounded, color: colors.primary),
-                const SizedBox(width: 8),
-                Expanded(
+    return MoriSettingsGroup(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  MoriIconBadge(icon: MoriIcons.bookmarks, size: 36),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '模型预设',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                '把常用的供应商和模型组合保存下来，切换时无需重新填写。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+            if (presets.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
+                child: Center(
                   child: Text(
-                    '模型预设',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+                    '还没有预设',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colors.onSurfaceVariant,
                     ),
                   ),
                 ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              '把常用的供应商和模型组合保存下来，切换时无需重新填写。',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
-            ),
-          ),
-          if (presets.isEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
-              child: Center(
-                child: Text(
-                  '还没有预设',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
+              )
+            else
+              for (final preset in presets) ...[
+                Divider(
+                  height: 1,
+                  indent: 16,
+                  endIndent: 16,
+                  color: colors.outlineVariant,
+                ),
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
                   ),
-                ),
-              ),
-            )
-          else
-            for (final preset in presets) ...[
-              Divider(
-                height: 1,
-                indent: 16,
-                endIndent: 16,
-                color: colors.outlineVariant,
-              ),
-              ListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 4,
-                ),
-                leading: Icon(
-                  preset.id == activeId
-                      ? Icons.check_circle_rounded
-                      : Icons.bookmark_border_rounded,
-                  color: preset.id == activeId
-                      ? colors.primary
-                      : colors.onSurfaceVariant,
-                ),
-                title: Row(
-                  children: [
-                    Flexible(child: Text(preset.name)),
-                    if (preset.id == activeId) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colors.primaryContainer,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          '使用中',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: colors.onPrimaryContainer,
+                  leading: Icon(
+                    preset.id == activeId
+                        ? MoriIcons.checkCircle
+                        : MoriIcons.bookmark,
+                    size: 20,
+                    color: preset.id == activeId
+                        ? colors.primary
+                        : colors.onSurfaceVariant,
+                  ),
+                  title: Row(
+                    children: [
+                      Flexible(child: Text(preset.name)),
+                      if (preset.id == activeId) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.primaryContainer,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            '使用中',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: colors.onPrimaryContainer,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
+                  subtitle: Text(
+                    '${ModelProviderCatalog.byId(preset.selection.providerId)?.name ?? preset.selection.providerId} · ${preset.selection.modelId}',
+                  ),
+                  trailing: IconButton(
+                    onPressed: () => _deletePreset(preset),
+                    tooltip: '删除预设',
+                    icon: const Icon(MoriIcons.trash, size: 19),
+                  ),
+                  onTap: () => _applyPreset(preset),
                 ),
-                subtitle: Text(
-                  '${ModelProviderCatalog.byId(preset.selection.providerId)?.name ?? preset.selection.providerId} · ${preset.selection.modelId}',
+              ],
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  onPressed: _savePreset,
+                  icon: const Icon(MoriIcons.bookmarkAdd, size: 17),
+                  label: const Text('保存当前配置为预设'),
                 ),
-                trailing: IconButton(
-                  onPressed: () => _deletePreset(preset),
-                  tooltip: '删除预设',
-                  icon: const Icon(Icons.delete_outline_rounded),
-                ),
-                onTap: () => _applyPreset(preset),
-              ),
-            ],
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton.tonalIcon(
-                onPressed: _savePreset,
-                icon: const Icon(Icons.bookmark_add_outlined),
-                label: const Text('保存当前配置为预设'),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 }

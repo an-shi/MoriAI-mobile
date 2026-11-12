@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:mori_ai/models/group_profile.dart';
 import 'package:mori_ai/services/avatar_store.dart';
+import 'package:mori_ai/widgets/avatar_fallback.dart';
 
 class GroupAvatar extends StatelessWidget {
   const GroupAvatar({
@@ -20,22 +21,15 @@ class GroupAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final file = forceFallback
         ? null
         : AvatarStore.instance.fileFor(group.avatar);
     final cacheWidth = (size * MediaQuery.devicePixelRatioOf(context)).round();
 
-    final fallback = Container(
-      width: size,
-      height: size,
-      color: colors.primaryContainer,
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.groups_rounded,
-        size: size * 0.55,
-        color: colors.onPrimaryContainer,
-      ),
+    final fallback = AvatarFallback(
+      label: group.displayName,
+      seed: group.id,
+      size: size,
     );
 
     final Widget image;

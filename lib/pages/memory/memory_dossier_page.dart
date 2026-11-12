@@ -5,6 +5,8 @@ import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/memory.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/memory_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 
 class MemoryDossierPage extends StatelessWidget {
@@ -70,10 +72,18 @@ class _CharacterDossierCard extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: colors.surfaceContainerLow,
+      color: theme.brightness == Brightness.light
+          ? colors.surfaceContainerLowest
+          : colors.surfaceContainerLow,
       clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: colors.outlineVariant.withValues(alpha: 0.6),
+          width: 0.7,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
         child: Column(
@@ -96,7 +106,7 @@ class _CharacterDossierCard extends StatelessWidget {
                 IconButton(
                   tooltip: '编辑人物档案',
                   onPressed: () => _editProfile(context, profile),
-                  icon: const Icon(Icons.edit_outlined),
+                  icon: const Icon(MoriIcons.edit),
                 ),
               ],
             ),
@@ -146,7 +156,7 @@ class _CharacterDossierCard extends StatelessWidget {
                 ),
                 TextButton.icon(
                   onPressed: () => _addTopic(context),
-                  icon: const Icon(Icons.add_rounded, size: 18),
+                  icon: const Icon(MoriIcons.plus, size: 18),
                   label: const Text('添加'),
                 ),
               ],
@@ -278,9 +288,9 @@ class _CharacterDossierCard extends StatelessWidget {
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('取消'),
           ),
-          FilledButton(
+          MoriDangerButton(
+            label: '删除',
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('删除'),
           ),
         ],
       ),
@@ -365,9 +375,7 @@ class _TopicRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            resolved
-                ? Icons.check_circle_outline_rounded
-                : Icons.radio_button_unchecked_rounded,
+            resolved ? MoriIcons.checkCircleOutline : MoriIcons.circle,
             size: 18,
             color: resolved ? colors.onSurfaceVariant : colors.primary,
           ),

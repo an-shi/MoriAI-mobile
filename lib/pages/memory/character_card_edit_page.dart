@@ -4,6 +4,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/services/avatar_store.dart';
 import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 
 class CharacterCardEditPage extends StatefulWidget {
@@ -200,7 +203,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
             children: [
               Expanded(
                 child: _AvatarSourceButton(
-                  icon: Icons.photo_library_outlined,
+                  icon: MoriIcons.photos,
                   label: '照片',
                   onTap: () =>
                       Navigator.of(sheetContext).pop(ImageSource.gallery),
@@ -209,7 +212,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
               const SizedBox(width: 16),
               Expanded(
                 child: _AvatarSourceButton(
-                  icon: Icons.photo_camera_outlined,
+                  icon: MoriIcons.camera,
                   label: '拍摄',
                   onTap: () =>
                       Navigator.of(sheetContext).pop(ImageSource.camera),
@@ -330,7 +333,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
           ),
           const SizedBox(height: 12),
           _CharacterSectionCard(
-            icon: Icons.account_circle_outlined,
+            icon: MoriIcons.profile,
             title: '角色头像',
             description: '会显示在角色卡列表和对话页面的助理头像上。',
             child: Row(
@@ -349,7 +352,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
                     children: [
                       FilledButton.tonalIcon(
                         onPressed: _saving ? null : _pickAvatar,
-                        icon: const Icon(Icons.add_photo_alternate_outlined),
+                        icon: const Icon(MoriIcons.imagePlus),
                         label: const Text('选择头像'),
                       ),
                       if (hasAvatar)
@@ -365,7 +368,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
           ),
           const SizedBox(height: 16),
           _CharacterSectionCard(
-            icon: Icons.tune_rounded,
+            icon: MoriIcons.tune,
             title: '角色卡类型',
             description: '选择适合的填写模板。切换类型会保留已填写内容，但只有当前类型包含的字段会用于对话。',
             child: Column(
@@ -375,12 +378,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
                   key: const ValueKey('character-card-type'),
                   initialValue: _type,
                   isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: '填写类型',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                  decoration: const InputDecoration(labelText: '填写类型'),
                   items: [
                     for (final type in CharacterCardType.values)
                       DropdownMenuItem<CharacterCardType>(
@@ -407,7 +405,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
           ),
           const SizedBox(height: 16),
           _CharacterSectionCard(
-            icon: Icons.badge_outlined,
+            icon: MoriIcons.badge,
             title: '基础信息',
             description: _type.usesRawDefinition
                 ? '名称仅用于角色卡列表和对话称呼，粘贴的设定原文不会被改写。'
@@ -438,7 +436,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
           if (_type.usesRawDefinition) ...[
             const SizedBox(height: 16),
             _CharacterSectionCard(
-              icon: Icons.content_paste_rounded,
+              icon: MoriIcons.copy,
               title: '粘贴角色卡设定',
               description: '把从其他地方复制来的完整设定粘贴到这里。原文会直接作为系统提示词，不做拆分或改写。',
               child: Column(
@@ -448,7 +446,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
                       onPressed: _saving ? null : _pasteRawDefinition,
-                      icon: const Icon(Icons.content_paste),
+                      icon: const Icon(MoriIcons.copy),
                       label: const Text('从剪贴板粘贴'),
                     ),
                   ),
@@ -470,7 +468,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
           if (!_type.usesRawDefinition) ...[
             const SizedBox(height: 16),
             _CharacterSectionCard(
-              icon: Icons.psychology_outlined,
+              icon: MoriIcons.brain,
               title: '人格描述',
               description: '一段自由填写的人格说明，适合简单陪伴类型。',
               child: Column(
@@ -493,7 +491,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
           if (_type.usesStructuredSettings) ...[
             const SizedBox(height: 16),
             _CharacterSectionCard(
-              icon: Icons.account_tree_outlined,
+              icon: MoriIcons.tree,
               title: '结构化设定',
               description: '这些字段只在结构化设定及以上类型中生效，建议保持简洁具体。',
               child: Column(
@@ -565,7 +563,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
           if (_type.usesDialogueSettings) ...[
             const SizedBox(height: 16),
             _CharacterSectionCard(
-              icon: Icons.chat_bubble_outline,
+              icon: MoriIcons.message,
               title: '对话表现',
               description: '场景和示例对话会加入提示词；开场白会显示在对话欢迎页。',
               child: Column(
@@ -603,7 +601,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
           if (_type.usesAdvancedSettings) ...[
             const SizedBox(height: 16),
             _CharacterSectionCard(
-              icon: Icons.settings_suggest_outlined,
+              icon: MoriIcons.settings2,
               title: '高级指令',
               description: '追加到系统提示词中，适合需要精细控制模型行为的角色。',
               child: Column(
@@ -638,7 +636,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.save_outlined),
+                : const Icon(MoriIcons.save),
             label: const Text('保存角色卡'),
           ),
         ],
@@ -668,7 +666,6 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
         hintText: hint,
         alignLabelWithHint: maxLines > 1,
         counterText: '',
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -691,7 +688,7 @@ class _CharacterCardEditPageState extends State<CharacterCardEditPage> {
       alignment: Alignment.centerLeft,
       child: TextButton.icon(
         onPressed: _saving ? null : () => _appendBurstTemplate(controller),
-        icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+        icon: const Icon(MoriIcons.sparkles, size: 18),
         label: const Text('填入连发模板'),
       ),
     );
@@ -715,19 +712,28 @@ class _AvatarSourceButton extends StatelessWidget {
     final colors = theme.colorScheme;
 
     return Material(
-      color: colors.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(16),
+      color: colors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(MoriRadius.large),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
+          padding: const EdgeInsets.symmetric(vertical: 22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 32, color: colors.primary),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 23, color: colors.onPrimaryContainer),
+              ),
               const SizedBox(height: 10),
-              Text(label, style: theme.textTheme.titleSmall),
+              Text(label, style: theme.textTheme.labelLarge),
             ],
           ),
         ),
@@ -754,42 +760,39 @@ class _CharacterSectionCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    return Card(
-      elevation: 0,
-      color: colors.surfaceContainerLow,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: colors.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
+          child: Row(
+            children: [
+              MoriIconBadge(icon: icon, size: 28),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              description,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colors.onSurfaceVariant,
               ),
-            ),
-            const SizedBox(height: 16),
-            child,
-          ],
+            ],
+          ),
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+          child: Text(
+            description,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+              height: 1.5,
+            ),
+          ),
+        ),
+        MoriSettingsGroup(padding: const EdgeInsets.all(16), children: [child]),
+      ],
     );
   }
 }

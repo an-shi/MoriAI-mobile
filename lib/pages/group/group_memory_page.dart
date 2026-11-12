@@ -7,6 +7,9 @@ import 'package:mori_ai/models/memory.dart';
 import 'package:mori_ai/services/group_memory_service.dart';
 import 'package:mori_ai/services/group_memory_store.dart';
 import 'package:mori_ai/services/group_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 import 'package:mori_ai/widgets/group_avatar.dart';
 
 class GroupMemoryPage extends StatefulWidget {
@@ -178,9 +181,9 @@ class _GroupMemoryPageState extends State<GroupMemoryPage> {
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('取消'),
           ),
-          FilledButton(
+          MoriDangerButton(
+            label: '删除',
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('删除'),
           ),
         ],
       ),
@@ -205,9 +208,9 @@ class _GroupMemoryPageState extends State<GroupMemoryPage> {
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('取消'),
           ),
-          FilledButton(
+          MoriDangerButton(
+            label: '清空',
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('清空'),
           ),
         ],
       ),
@@ -244,7 +247,7 @@ class _GroupMemoryPageState extends State<GroupMemoryPage> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2.5),
                   )
-                : const Icon(Icons.auto_fix_high_outlined),
+                : const Icon(MoriIcons.autoFix, size: 21),
           ),
           PopupMenuButton<String>(
             tooltip: '群公共记忆操作',
@@ -261,7 +264,7 @@ class _GroupMemoryPageState extends State<GroupMemoryPage> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addMemory,
-        icon: const Icon(Icons.add_rounded),
+        icon: const Icon(MoriIcons.plus, size: 20),
         label: const Text('添加共同记忆'),
       ),
       body: AnimatedBuilder(
@@ -282,30 +285,34 @@ class _GroupMemoryPageState extends State<GroupMemoryPage> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             children: [
               _GroupHeader(group: group),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               _buildProfileCard(group, profile, theme, colors),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: '搜索群公共记忆',
-                  prefixIcon: const Icon(Icons.search_rounded),
+                  prefixIcon: const Icon(MoriIcons.search, size: 20),
                   suffixIcon: _query.isEmpty
                       ? null
                       : IconButton(
                           tooltip: '清空搜索',
                           onPressed: _searchController.clear,
-                          icon: const Icon(Icons.close_rounded),
+                          icon: const Icon(MoriIcons.close, size: 18),
                         ),
                   filled: true,
                   fillColor: colors.surfaceContainerLow,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(MoriRadius.medium),
                     borderSide: BorderSide.none,
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               if (entries.isEmpty)
                 _EmptyGroupMemory(hasQuery: _query.isNotEmpty)
               else
@@ -328,15 +335,10 @@ class _GroupMemoryPageState extends State<GroupMemoryPage> {
     ThemeData theme,
     ColorScheme colors,
   ) {
-    return Card(
-      elevation: 0,
-      color: colors.surfaceContainerLow,
-      clipBehavior: Clip.antiAlias,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 14),
-        child: Column(
+    return MoriSettingsGroup(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 14),
+      children: [
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -352,7 +354,7 @@ class _GroupMemoryPageState extends State<GroupMemoryPage> {
                 IconButton(
                   tooltip: '编辑群印象',
                   onPressed: () => _editProfile(profile),
-                  icon: const Icon(Icons.edit_outlined),
+                  icon: const Icon(MoriIcons.edit, size: 18),
                 ),
               ],
             ),
@@ -385,7 +387,7 @@ class _GroupMemoryPageState extends State<GroupMemoryPage> {
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -468,84 +470,85 @@ class _GroupMemoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    return Card(
-      elevation: 0,
-      color: colors.surfaceContainerLow,
-      clipBehavior: Clip.antiAlias,
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+    return Container(
+      padding: const EdgeInsets.fromLTRB(2, 12, 0, 14),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: 0.75),
+            width: 0.8,
+          ),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    _Tag(
+                      label: entry.categoryLabel,
+                      color: colors.primaryContainer,
+                      textColor: colors.onPrimaryContainer,
+                    ),
+                    _Tag(
+                      label: entry.sourceLabel,
+                      color: colors.surfaceContainerHighest,
+                      textColor: colors.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  entry.text,
+                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+                ),
+                if (entry.tags.isNotEmpty) ...[
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
                     children: [
-                      _Tag(
-                        label: entry.categoryLabel,
-                        color: colors.primaryContainer,
-                        textColor: colors.onPrimaryContainer,
-                      ),
-                      _Tag(
-                        label: entry.sourceLabel,
-                        color: colors.surfaceContainerHighest,
-                        textColor: colors.onSurfaceVariant,
-                      ),
+                      for (final tag in entry.tags)
+                        _Tag(
+                          label: tag,
+                          color: colors.secondaryContainer,
+                          textColor: colors.onSecondaryContainer,
+                        ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    entry.text,
-                    style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
-                  ),
-                  if (entry.tags.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: [
-                        for (final tag in entry.tags)
-                          _Tag(
-                            label: tag,
-                            color: colors.secondaryContainer,
-                            textColor: colors.onSecondaryContainer,
-                          ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 6),
-                  Text(
-                    '${_timeLabel(entry.updatedAtMs)} · '
-                    '重要性 ${entry.importance.toStringAsFixed(1)}',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
                 ],
-              ),
-            ),
-            PopupMenuButton<String>(
-              tooltip: '群记忆操作',
-              onSelected: (value) {
-                if (value == 'edit') {
-                  onEdit();
-                } else if (value == 'delete') {
-                  onDelete();
-                }
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem<String>(value: 'edit', child: Text('编辑')),
-                PopupMenuItem<String>(value: 'delete', child: Text('删除')),
+                const SizedBox(height: 6),
+                Text(
+                  '${_timeLabel(entry.updatedAtMs)} · '
+                  '重要性 ${entry.importance.toStringAsFixed(1)}',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
               ],
             ),
-          ],
-        ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: '群记忆操作',
+            onSelected: (value) {
+              if (value == 'edit') {
+                onEdit();
+              } else if (value == 'delete') {
+                onDelete();
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem<String>(value: 'edit', child: Text('编辑')),
+              PopupMenuItem<String>(value: 'delete', child: Text('删除')),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -586,32 +589,11 @@ class _EmptyGroupMemory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 36),
-      child: Column(
-        children: [
-          Icon(
-            hasQuery ? Icons.search_off_rounded : Icons.groups_outlined,
-            size: 44,
-            color: colors.onSurfaceVariant,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            hasQuery ? '没有找到相关群公共记忆' : '还没有群公共记忆',
-            style: theme.textTheme.titleMedium,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            hasQuery ? '换一个关键词试试。' : '群聊闲置后会自动整理大家共同经历和群印象。',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
+    return MoriEmptyState(
+      icon: hasQuery ? MoriIcons.searchOff : MoriIcons.groupRound,
+      title: hasQuery ? '没有找到相关群公共记忆' : '还没有群公共记忆',
+      message: hasQuery ? '换一个关键词试试。' : '群聊闲置后会自动整理大家共同经历和群印象。',
+      compact: true,
     );
   }
 }

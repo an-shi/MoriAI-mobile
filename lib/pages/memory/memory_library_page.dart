@@ -7,7 +7,11 @@ import 'package:mori_ai/pages/memory/memory_settings_page.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/memory_service.dart';
 import 'package:mori_ai/services/memory_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 import 'package:mori_ai/utils/memory_search.dart';
+import 'package:mori_ai/widgets/avatar_fallback.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 
 class MemoryLibraryPage extends StatefulWidget {
@@ -111,9 +115,9 @@ class _MemoryLibraryPageState extends State<MemoryLibraryPage> {
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('取消'),
           ),
-          FilledButton(
+          MoriDangerButton(
+            label: '删除',
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('删除'),
           ),
         ],
       ),
@@ -229,18 +233,18 @@ class _MemoryLibraryPageState extends State<MemoryLibraryPage> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2.5),
                   )
-                : const Icon(Icons.auto_fix_high_outlined),
+                : const Icon(MoriIcons.autoFix, size: 21),
           ),
           IconButton(
             tooltip: '记忆设置',
             onPressed: _openSettings,
-            icon: const Icon(Icons.settings_outlined),
+            icon: const Icon(MoriIcons.settings, size: 21),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addMemory,
-        icon: const Icon(Icons.add_rounded),
+        icon: const Icon(MoriIcons.plus, size: 20),
         label: const Text('添加记忆'),
       ),
       body: AnimatedBuilder(
@@ -254,31 +258,35 @@ class _MemoryLibraryPageState extends State<MemoryLibraryPage> {
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
                 child: TextField(
                   controller: _searchController,
                   textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
                     hintText: '搜索记忆',
-                    prefixIcon: const Icon(Icons.search_rounded),
+                    prefixIcon: const Icon(MoriIcons.search, size: 20),
                     suffixIcon: _query.isEmpty
                         ? null
                         : IconButton(
                             tooltip: '清空搜索',
                             onPressed: _searchController.clear,
-                            icon: const Icon(Icons.close_rounded),
+                            icon: const Icon(MoriIcons.close, size: 18),
                           ),
                     filled: true,
                     fillColor: colors.surfaceContainerLow,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(MoriRadius.medium),
                       borderSide: BorderSide.none,
                     ),
                   ),
                 ),
               ),
               SizedBox(
-                height: 42,
+                height: 38,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -291,7 +299,7 @@ class _MemoryLibraryPageState extends State<MemoryLibraryPage> {
                       }),
                     ),
                     for (final card in cards) ...[
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 7),
                       ChoiceChip(
                         label: Text(card.displayName),
                         selected: _characterFilter == card.id,
@@ -303,7 +311,7 @@ class _MemoryLibraryPageState extends State<MemoryLibraryPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               Expanded(
                 child: entries.isEmpty
                     ? _EmptyMemoryState(
@@ -348,113 +356,105 @@ class _MemoryCard extends StatelessWidget {
     final colors = theme.colorScheme;
     final character = CharacterStore.instance.cardById(entry.characterId);
     final avatar = character == null
-        ? CircleAvatar(
-            radius: 20,
-            backgroundColor: colors.secondaryContainer,
-            child: Icon(
-              Icons.person_outline,
-              color: colors.onSecondaryContainer,
-            ),
-          )
+        ? const AvatarFallback(label: '已删除的角色', size: 40, icon: MoriIcons.user)
         : CharacterAvatar(character: character, size: 40);
     final name = character?.displayName ?? '已删除的角色';
 
-    return Card(
-      elevation: 0,
-      color: colors.surfaceContainerLow,
-      clipBehavior: Clip.antiAlias,
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 6, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                avatar,
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: 0.75),
+            width: 0.8,
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(2, 12, 0, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              avatar,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                          _MemoryTag(
-                            label: entry.categoryLabel,
-                            color: colors.primaryContainer,
-                            textColor: colors.onPrimaryContainer,
-                          ),
-                          const SizedBox(width: 6),
-                          _MemoryTag(
-                            label: entry.sourceLabel,
-                            color: colors.surfaceContainerHighest,
-                            textColor: colors.onSurfaceVariant,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        entry.text,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          height: 1.55,
                         ),
-                      ),
-                      if (entry.tags.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
-                            for (final tag in entry.tags)
-                              _MemoryTag(
-                                label: tag,
-                                color: colors.secondaryContainer,
-                                textColor: colors.onSecondaryContainer,
-                              ),
-                          ],
+                        _MemoryTag(
+                          label: entry.categoryLabel,
+                          color: colors.primaryContainer,
+                          textColor: colors.onPrimaryContainer,
+                        ),
+                        const SizedBox(width: 6),
+                        _MemoryTag(
+                          label: entry.sourceLabel,
+                          color: colors.surfaceContainerHighest,
+                          textColor: colors.onSurfaceVariant,
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      entry.text,
+                      style: theme.textTheme.bodyMedium?.copyWith(height: 1.55),
+                    ),
+                    if (entry.tags.isNotEmpty) ...[
                       const SizedBox(height: 8),
-                      Text(
-                        '${_timeLabel(entry.updatedAt)} · '
-                        '重要性 ${entry.importance.toStringAsFixed(1)}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final tag in entry.tags)
+                            _MemoryTag(
+                              label: tag,
+                              color: colors.secondaryContainer,
+                              textColor: colors.onSecondaryContainer,
+                            ),
+                        ],
                       ),
                     ],
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: '记忆操作',
-                  onSelected: (value) {
-                    if (value == 'edit') {
-                      onEdit();
-                    } else if (value == 'delete') {
-                      onDelete();
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem<String>(value: 'edit', child: Text('编辑')),
-                    PopupMenuItem<String>(value: 'delete', child: Text('删除')),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${_timeLabel(entry.updatedAt)} · '
+                      '重要性 ${entry.importance.toStringAsFixed(1)}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: '记忆操作',
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    onEdit();
+                  } else if (value == 'delete') {
+                    onDelete();
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem<String>(value: 'edit', child: Text('编辑')),
+                  PopupMenuItem<String>(value: 'delete', child: Text('删除')),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -495,18 +495,7 @@ class _MemoryTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall
-            ?.copyWith(color: textColor),
-      ),
-    );
+    return MoriTag(label: label, background: color, foreground: textColor);
   }
 }
 
@@ -518,43 +507,19 @@ class _EmptyMemoryState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              hasQuery ? Icons.search_off_rounded : Icons.psychology_outlined,
-              size: 48,
-              color: colors.onSurfaceVariant,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              hasQuery ? '没有找到相关记忆' : '还没有记忆',
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              hasQuery ? '换一个关键词试试。' : '角色会在聊天闲置后自动整理值得长期记住的事，也可以手动添加。',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
-            ),
-            if (!hasQuery) ...[
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: onAdd,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('添加记忆'),
-              ),
-            ],
-          ],
-        ),
-      ),
+    return MoriEmptyState(
+      icon: hasQuery ? MoriIcons.searchOff : MoriIcons.brain,
+      title: hasQuery ? '没有找到相关记忆' : '还没有记忆',
+      message: hasQuery ? '换一个关键词试试。' : '角色会在聊天闲置后自动整理值得长期记住的事，也可以手动添加。',
+      compact: true,
+      actions: [
+        if (!hasQuery)
+          MoriActionButton(
+            label: '添加记忆',
+            icon: MoriIcons.plus,
+            onPressed: onAdd,
+          ),
+      ],
     );
   }
 }

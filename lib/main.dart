@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:forui/forui.dart';
 import 'package:mori_ai/pages/home_page.dart';
 import 'package:mori_ai/services/api_key_store.dart';
 import 'package:mori_ai/services/avatar_store.dart';
@@ -28,6 +29,7 @@ import 'package:mori_ai/services/system_context_settings_store.dart';
 import 'package:mori_ai/services/theme_store.dart';
 import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,7 +70,8 @@ class MoriApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const seedColor = Color(0xFF6B9080);
+    final lightTheme = MoriTheme.light();
+    final darkTheme = MoriTheme.dark();
 
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: ThemeStore.instance.themeMode,
@@ -77,6 +80,10 @@ class MoriApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'Mori',
           themeMode: themeMode,
+          theme: lightTheme,
+          darkTheme: darkTheme,
+          themeAnimationDuration: const Duration(milliseconds: 280),
+          themeAnimationCurve: Curves.easeOutCubic,
           locale: const Locale('zh', 'CN'),
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
@@ -84,17 +91,13 @@ class MoriApp extends StatelessWidget {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: const [Locale('zh', 'CN'), Locale('en')],
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: seedColor),
-            useMaterial3: true,
-          ),
-          darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: seedColor,
-              brightness: Brightness.dark,
-            ),
-            useMaterial3: true,
-          ),
+          builder: (context, child) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return FTheme(
+              data: MoriTheme.forui(isDark ? darkTheme : lightTheme),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           home: const HomePage(),
         );
       },

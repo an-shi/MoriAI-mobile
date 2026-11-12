@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:forui/forui.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/models/moment.dart';
@@ -10,6 +11,8 @@ import 'package:mori_ai/services/moment_generator.dart';
 import 'package:mori_ai/services/moment_interaction_service.dart';
 import 'package:mori_ai/services/moment_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/user_avatar.dart';
 
@@ -132,7 +135,7 @@ class _MomentsPageState extends State<MomentsPage> {
                     leading: CharacterAvatar(character: card, size: 40),
                     title: Text(card.displayName),
                     subtitle: Text(card.type.label),
-                    trailing: const Icon(Icons.chevron_right_rounded),
+                    trailing: const Icon(MoriIcons.chevron),
                     onTap: () => Navigator.of(sheetContext).pop(card),
                   ),
               ],
@@ -258,9 +261,9 @@ class _MomentsPageState extends State<MomentsPage> {
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('取消'),
             ),
-            FilledButton(
+            MoriDangerButton(
+              label: '删除',
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('删除'),
             ),
           ],
         );
@@ -295,10 +298,7 @@ class _MomentsPageState extends State<MomentsPage> {
             children: [
               ListTile(
                 key: const Key('delete-comment-action'),
-                leading: Icon(
-                  Icons.delete_outline_rounded,
-                  color: colors.error,
-                ),
+                leading: Icon(MoriIcons.trash, color: colors.error),
                 title: Text('删除评论', style: TextStyle(color: colors.error)),
                 subtitle: const Text('该评论下的回复也会一起删除'),
                 onTap: () => Navigator.of(sheetContext).pop('delete'),
@@ -367,7 +367,7 @@ class _MomentsPageState extends State<MomentsPage> {
           ? FloatingActionButton.extended(
               key: const Key('moment-compose-fab'),
               onPressed: _composeMoment,
-              icon: const Icon(Icons.edit_outlined),
+              icon: const Icon(MoriIcons.edit, size: 19),
               label: const Text('发动态'),
             )
           : null,
@@ -395,14 +395,15 @@ class _MomentsPageState extends State<MomentsPage> {
                   minHeight: 2,
                 ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                padding: const EdgeInsets.fromLTRB(16, 14, 12, 2),
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
                         widget.headerLabel,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 17,
                         ),
                       ),
                     ),
@@ -410,7 +411,7 @@ class _MomentsPageState extends State<MomentsPage> {
                       TextButton.icon(
                         key: const Key('moment-character-action'),
                         onPressed: _generating ? null : _openCharacterPicker,
-                        icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                        icon: const Icon(MoriIcons.sparkles, size: 17),
                         label: Text(_generating ? '生成中…' : '角色发动态'),
                       ),
                   ],
@@ -425,10 +426,10 @@ class _MomentsPageState extends State<MomentsPage> {
                             : null,
                       )
                     : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                        padding: const EdgeInsets.fromLTRB(16, 6, 16, 96),
                         itemCount: moments.length,
                         separatorBuilder: (context, index) =>
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 2),
                         itemBuilder: (context, index) {
                           final moment = moments[index];
                           final character = moment.isUser
@@ -486,60 +487,25 @@ class _EmptyMoments extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(32, 16, 32, 96),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.dynamic_feed_outlined,
-              size: 52,
-              color: colors.onSurfaceVariant,
-            ),
-            const SizedBox(height: 14),
-            Text(
-              '还没有动态',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '发一条动态，或者让角色发一条。',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
-            ),
-            if (onCompose != null || onGenerate != null) ...[
-              const SizedBox(height: 18),
-              Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: [
-                  if (onCompose != null)
-                    FilledButton.tonalIcon(
-                      onPressed: onCompose,
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('发动态'),
-                    ),
-                  if (onGenerate != null)
-                    OutlinedButton.icon(
-                      onPressed: onGenerate,
-                      icon: const Icon(Icons.auto_awesome_outlined),
-                      label: const Text('角色发动态'),
-                    ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
+    return MoriEmptyState(
+      icon: MoriIcons.moments,
+      title: '还没有动态',
+      message: '发一条动态，或者让角色写一条。',
+      actions: [
+        if (onCompose != null)
+          MoriActionButton(
+            label: '发动态',
+            icon: MoriIcons.edit,
+            onPressed: onCompose,
+          ),
+        if (onGenerate != null)
+          MoriActionButton(
+            label: '角色发动态',
+            icon: MoriIcons.sparkles,
+            variant: FButtonVariant.outline,
+            onPressed: onGenerate,
+          ),
+      ],
     );
   }
 }
@@ -595,165 +561,161 @@ class _MomentCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      color: colors.surfaceContainerLow,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                avatar,
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        authorName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(2, 14, 2, 10),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: 0.75),
+            width: 0.8,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              avatar,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      authorName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        timeLabel,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  key: ValueKey('moment-menu-${moment.id}'),
-                  tooltip: '动态菜单',
-                  padding: EdgeInsets.zero,
-                  icon: Icon(
-                    Icons.more_horiz_rounded,
-                    color: colors.onSurfaceVariant,
-                  ),
-                  onSelected: (value) {
-                    if (value == 'delete') {
-                      onDelete();
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem<String>(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline_rounded),
-                          SizedBox(width: 10),
-                          Text('删除'),
-                        ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      timeLabel,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colors.onSurfaceVariant,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
-            if (moment.image != null) ...[
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 360),
-                  child: Image.memory(
-                    moment.image!.bytes,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    semanticLabel: '动态图片',
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        height: 160,
-                        width: double.infinity,
-                        color: colors.surfaceContainerHighest,
-                        alignment: Alignment.center,
-                        child: Icon(
-                          Icons.broken_image_outlined,
-                          color: colors.onSurfaceVariant,
-                        ),
-                      );
-                    },
+              ),
+              PopupMenuButton<String>(
+                key: ValueKey('moment-menu-${moment.id}'),
+                tooltip: '动态菜单',
+                padding: EdgeInsets.zero,
+                icon: Icon(MoriIcons.more, color: colors.onSurfaceVariant),
+                onSelected: (value) {
+                  if (value == 'delete') {
+                    onDelete();
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(MoriIcons.trash),
+                        SizedBox(width: 10),
+                        Text('删除'),
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ],
-            if (moment.content.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                moment.content,
-                style: theme.textTheme.bodyLarge?.copyWith(height: 1.5),
-              ),
-            ],
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 2,
-              children: [
-                TextButton.icon(
-                  key: ValueKey('moment-comment-${moment.id}'),
-                  onPressed: onComment,
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
-                  label: Text(
-                    moment.comments.isEmpty
-                        ? '评论'
-                        : '评论 ${moment.comments.length}',
-                  ),
-                ),
-              ],
-            ),
-            if (moment.comments.isNotEmpty) ...[
-              Divider(height: 16, color: colors.outlineVariant),
-              for (final comment in moment.comments)
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    key: ValueKey('moment-comment-row-${comment.id}'),
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () => onReplyComment(comment),
-                    onLongPress: () => onDeleteComment(comment),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 2,
-                        vertical: 6,
+          ),
+          if (moment.image != null) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360),
+                child: Image.memory(
+                  moment.image!.bytes,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  semanticLabel: '动态图片',
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      height: 160,
+                      width: double.infinity,
+                      color: colors.surfaceContainerHighest,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        MoriIcons.imageOff,
+                        color: colors.onSurfaceVariant,
                       ),
-                      child: RichText(
-                        text: TextSpan(
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colors.onSurface,
-                            height: 1.4,
-                          ),
-                          children: [
-                            TextSpan(
-                              text:
-                                  '${_commentAuthorName(comment)}${_replyTargetName(comment) == null ? '' : ' 回复 ${_replyTargetName(comment)}'}：',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            TextSpan(text: comment.content),
-                          ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+          if (moment.content.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              moment.content,
+              style: theme.textTheme.bodyLarge?.copyWith(height: 1.5),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 2,
+            children: [
+              TextButton.icon(
+                key: ValueKey('moment-comment-${moment.id}'),
+                onPressed: onComment,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 36),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: const Icon(MoriIcons.message, size: 18),
+                label: Text(
+                  moment.comments.isEmpty
+                      ? '评论'
+                      : '评论 ${moment.comments.length}',
+                ),
+              ),
+            ],
+          ),
+          if (moment.comments.isNotEmpty) ...[
+            Divider(height: 16, color: colors.outlineVariant),
+            for (final comment in moment.comments)
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  key: ValueKey('moment-comment-row-${comment.id}'),
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => onReplyComment(comment),
+                  onLongPress: () => onDeleteComment(comment),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 2,
+                      vertical: 6,
+                    ),
+                    child: RichText(
+                      text: TextSpan(
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colors.onSurface,
+                          height: 1.4,
                         ),
+                        children: [
+                          TextSpan(
+                            text:
+                                '${_commentAuthorName(comment)}${_replyTargetName(comment) == null ? '' : ' 回复 ${_replyTargetName(comment)}'}：',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          TextSpan(text: comment.content),
+                        ],
                       ),
                     ),
                   ),
                 ),
-            ],
+              ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -819,13 +781,13 @@ class _MomentComposerState extends State<_MomentComposer> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
+                leading: const Icon(MoriIcons.photos),
                 title: const Text('照片'),
                 onTap: () =>
                     Navigator.of(sheetContext).pop(ImageSource.gallery),
               ),
               ListTile(
-                leading: const Icon(Icons.photo_camera_outlined),
+                leading: const Icon(MoriIcons.camera),
                 title: const Text('拍摄'),
                 onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
               ),
@@ -950,12 +912,9 @@ class _MomentComposerState extends State<_MomentComposer> {
               maxLines: 6,
               maxLength: 500,
               textInputAction: TextInputAction.newline,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: '分享此刻…',
                 alignLabelWithHint: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
               ),
             ),
             if (_image != null) ...[
@@ -976,7 +935,7 @@ class _MomentComposerState extends State<_MomentComposer> {
                           color: colors.surfaceContainerHighest,
                           alignment: Alignment.center,
                           child: Icon(
-                            Icons.broken_image_outlined,
+                            MoriIcons.imageOff,
                             color: colors.onSurfaceVariant,
                           ),
                         );
@@ -1000,7 +959,7 @@ class _MomentComposerState extends State<_MomentComposer> {
                         },
                         child: const Padding(
                           padding: EdgeInsets.all(4),
-                          child: Icon(Icons.close_rounded, size: 16),
+                          child: Icon(MoriIcons.close, size: 16),
                         ),
                       ),
                     ),
@@ -1013,7 +972,7 @@ class _MomentComposerState extends State<_MomentComposer> {
               children: [
                 TextButton.icon(
                   onPressed: _pickImage,
-                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  icon: const Icon(MoriIcons.imagePlus),
                   label: const Text('图片'),
                 ),
                 const Spacer(),
@@ -1148,9 +1107,6 @@ class _CommentComposerState extends State<_CommentComposer> {
                 hintText: widget.replyTo == null
                     ? '写评论…'
                     : '回复 ${widget.replyToName}…',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
               ),
             ),
             Align(

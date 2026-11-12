@@ -16,6 +16,9 @@ import 'package:mori_ai/services/mood_store.dart';
 import 'package:mori_ai/services/proactive_message_service.dart';
 import 'package:mori_ai/services/proactive_message_store.dart';
 import 'package:mori_ai/services/unread_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/diary_character_settings_sheet.dart';
 import 'package:mori_ai/widgets/number_setting_field.dart';
@@ -50,9 +53,9 @@ class CharacterChatSettingsPage extends StatelessWidget {
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('取消'),
             ),
-            FilledButton(
+            MoriDangerButton(
+              label: '删除',
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('删除'),
             ),
           ],
         );
@@ -105,117 +108,101 @@ class CharacterChatSettingsPage extends StatelessWidget {
         return Scaffold(
           appBar: AppBar(title: Text(character.displayName)),
           body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            padding: MoriTheme.pagePadding,
             children: [
-              Card(
-                elevation: 0,
-                color: colors.surfaceContainerLow,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  leading: CharacterAvatar(character: character, size: 48),
-                  title: Text(
-                    character.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: Text(character.type.label),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _MoodStatusCard(characterId: character.id),
-              const SizedBox(height: 16),
-              _DiaryCharacterCard(character: character),
-              const SizedBox(height: 16),
-              Card(
-                elevation: 0,
-                color: colors.surfaceContainerLow,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 6,
-                  ),
-                  leading: Icon(
-                    Icons.dynamic_feed_outlined,
-                    color: colors.primary,
-                  ),
-                  title: const Text('动态'),
-                  subtitle: Text('查看「${character.displayName}」发布的动态'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) =>
-                            CharacterMomentsPage(characterId: character!.id),
+              MoriSettingsGroup(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: colors.primary.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: CharacterAvatar(character: character, size: 64),
                       ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-              Card(
-                elevation: 0,
-                color: colors.surfaceContainerLow,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 6,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              character.displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 19,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              character.type.label,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  leading: Icon(Icons.badge_outlined, color: colors.primary),
-                  title: const Text('角色卡设置'),
-                  subtitle: const Text('修改角色设定、头像、开场白等内容'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => _openCardEditor(context),
-                ),
+                ],
               ),
-              const SizedBox(height: 16),
+              const MoriSectionHeader(label: '最近状态'),
+              _MoodStatusCard(characterId: character.id),
+              const SizedBox(height: 12),
+              _DiaryCharacterCard(character: character),
+              const MoriSectionHeader(label: '角色内容'),
+              MoriSettingsGroup(
+                children: [
+                  MoriSettingsTile(
+                    icon: MoriIcons.moments,
+                    title: '动态',
+                    subtitle: '查看「${character.displayName}」发布的动态',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) =>
+                              CharacterMomentsPage(characterId: character!.id),
+                        ),
+                      );
+                    },
+                  ),
+                  MoriSettingsTile(
+                    icon: MoriIcons.badge,
+                    title: '角色卡设置',
+                    subtitle: '修改角色设定、头像、开场白等内容',
+                    onTap: () => _openCardEditor(context),
+                  ),
+                ],
+              ),
+              const MoriSectionHeader(label: '聊天行为'),
               _BurstTendencyCard(
                 characterId: character.id,
                 characterName: character.displayName,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               _ProactiveConversationCard(
                 characterId: character.id,
                 characterName: character.displayName,
               ),
-              const SizedBox(height: 16),
-              Card(
-                elevation: 0,
-                color: colors.surfaceContainerLow,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 6,
+              const MoriSectionHeader(label: '数据'),
+              MoriSettingsGroup(
+                children: [
+                  MoriSettingsTile(
+                    icon: MoriIcons.erase,
+                    title: '删除聊天记录',
+                    subtitle: '清空与该角色的全部本地聊天记录',
+                    danger: true,
+                    showChevron: false,
+                    onTap: () => _deleteHistory(context),
                   ),
-                  leading: Icon(
-                    Icons.delete_sweep_outlined,
-                    color: colors.error,
-                  ),
-                  title: Text('删除聊天记录', style: TextStyle(color: colors.error)),
-                  subtitle: const Text('清空与该角色的全部本地聊天记录'),
-                  onTap: () => _deleteHistory(context),
-                ),
+                ],
               ),
             ],
           ),
@@ -232,9 +219,6 @@ class _DiaryCharacterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-
     return AnimatedBuilder(
       animation: DiaryStore.instance.settings,
       builder: (context, _) {
@@ -245,30 +229,18 @@ class _DiaryCharacterCard extends StatelessWidget {
         final mode = custom ? '单独设置' : '跟随全局';
         final status = enabled ? '每天 $timeLabel 写' : '不自动写';
 
-        return Card(
-          elevation: 0,
-          color: colors.surfaceContainerLow,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 6,
-            ),
-            leading: Icon(Icons.menu_book_outlined, color: colors.primary),
-            title: Text(
-              '日记',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
+        return MoriSettingsGroup(
+          children: [
+            MoriSettingsTile(
+              icon: MoriIcons.diary,
+              title: '日记',
+              subtitle: '$mode · $status',
+              onTap: () => showDiaryCharacterSettingsSheet(
+                context,
+                character: character,
               ),
             ),
-            subtitle: Text('$mode · $status'),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () =>
-                showDiaryCharacterSettingsSheet(context, character: character),
-          ),
+          ],
         );
       },
     );
@@ -309,22 +281,16 @@ class _MoodStatusCard extends StatelessWidget {
             ? (hasRecord ? updatedAt : '还没有心情记录')
             : (hasRecord ? '${snapshot.reason} · $updatedAt' : snapshot.reason);
 
-        return Card(
-          elevation: 0,
-          color: colors.surfaceContainerLow,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-            child: Column(
+        return MoriSettingsGroup(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          children: [
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.mood_outlined, color: colors.primary),
-                    const SizedBox(width: 12),
+                    MoriIconBadge(icon: MoriIcons.mood, size: 32),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         '心情',
@@ -337,7 +303,7 @@ class _MoodStatusCard extends StatelessWidget {
                       IconButton(
                         tooltip: '重置心情',
                         onPressed: () => unawaited(_resetMood(context)),
-                        icon: const Icon(Icons.restart_alt_rounded),
+                        icon: const Icon(MoriIcons.reset, size: 18),
                       ),
                   ],
                 ),
@@ -387,7 +353,7 @@ class _MoodStatusCard extends StatelessWidget {
                 ],
               ],
             ),
-          ),
+          ],
         );
       },
     );
@@ -430,22 +396,16 @@ class _BurstTendencyCard extends StatelessWidget {
             ChatBurstTendency.followGlobal;
         final effective = settings.tendencyFor(characterId);
         final range = settings.rangeFor(effective);
-        return Card(
-          elevation: 0,
-          color: colors.surfaceContainerLow,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-            child: Column(
+        return MoriSettingsGroup(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          children: [
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.forum_outlined, color: colors.primary),
-                    const SizedBox(width: 12),
+                    MoriIconBadge(icon: MoriIcons.chats, size: 32),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         '聊天连发倾向',
@@ -500,7 +460,7 @@ class _BurstTendencyCard extends StatelessWidget {
                 ),
               ],
             ),
-          ),
+          ],
         );
       },
     );
@@ -590,9 +550,6 @@ class _ProactiveConversationCardState
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-
     return AnimatedBuilder(
       animation: ProactiveMessageStore.instance.settings,
       builder: (context, _) {
@@ -613,64 +570,41 @@ class _ProactiveConversationCardState
             ? '开启后，「${widget.characterName}」会主动找你'
             : '该角色不会主动发消息';
 
-        return Card(
-          elevation: 0,
-          color: colors.surfaceContainerLow,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            children: [
-              SwitchListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 4,
-                ),
-                secondary: Icon(
-                  Icons.notifications_active_outlined,
-                  color: colors.primary,
-                ),
-                title: const Text('允许主动消息'),
-                subtitle: Text(subtitle),
-                value: enabled,
-                onChanged: _loading || _saving ? null : _setEnabled,
+        return MoriSettingsGroup(
+          children: [
+            MoriSettingsSwitchTile(
+              icon: MoriIcons.bell,
+              title: '允许主动消息',
+              subtitle: subtitle,
+              value: enabled,
+              onChanged: _loading || _saving ? null : _setEnabled,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: NumberSettingField(
+                label: '该角色每日上限',
+                value: dailyLimit,
+                min: 0,
+                allowUnlimited: true,
+                helperText: dailyLimit < 0
+                    ? '当前该角色无上限；0 表示跟随全局（$effectiveLimitLabel）。'
+                    : '0 表示跟随全局（$effectiveLimitLabel）；负数表示该角色无上限。',
+                onChanged: _setDailyLimit,
               ),
-              Divider(
-                height: 1,
-                indent: 16,
-                endIndent: 16,
-                color: colors.outlineVariant,
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: NumberSettingField(
-                  label: '该角色每日上限',
-                  value: dailyLimit,
-                  min: 0,
-                  allowUnlimited: true,
-                  helperText: dailyLimit < 0
-                      ? '当前该角色无上限；0 表示跟随全局（$effectiveLimitLabel）。'
-                      : '0 表示跟随全局（$effectiveLimitLabel）；负数表示该角色无上限。',
-                  onChanged: _setDailyLimit,
-                ),
-              ),
-              ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                leading: Icon(Icons.tune_rounded, color: colors.primary),
-                title: const Text('全局自动消息设置'),
-                subtitle: const Text('调整沉默间隔、定时问候和免打扰'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const ProactiveMessageSettingsPage(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
+            ),
+            MoriSettingsTile(
+              icon: MoriIcons.tune,
+              title: '全局自动消息设置',
+              subtitle: '调整沉默间隔、定时问候和免打扰',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ProactiveMessageSettingsPage(),
+                  ),
+                );
+              },
+            ),
+          ],
         );
       },
     );

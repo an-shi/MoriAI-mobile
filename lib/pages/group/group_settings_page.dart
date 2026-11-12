@@ -11,6 +11,9 @@ import 'package:mori_ai/services/chat_queue_store.dart';
 import 'package:mori_ai/services/group_store.dart';
 import 'package:mori_ai/services/unread_store.dart';
 import 'package:mori_ai/pages/group/group_memory_page.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 import 'package:mori_ai/widgets/group_avatar.dart';
 
@@ -62,7 +65,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
             children: [
               Expanded(
                 child: _AvatarSourceButton(
-                  icon: Icons.photo_library_outlined,
+                  icon: MoriIcons.photos,
                   label: '照片',
                   onTap: () =>
                       Navigator.of(sheetContext).pop(ImageSource.gallery),
@@ -71,7 +74,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
               const SizedBox(width: 16),
               Expanded(
                 child: _AvatarSourceButton(
-                  icon: Icons.photo_camera_outlined,
+                  icon: MoriIcons.camera,
                   label: '拍摄',
                   onTap: () =>
                       Navigator.of(sheetContext).pop(ImageSource.camera),
@@ -200,9 +203,9 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('取消'),
             ),
-            FilledButton(
+            MoriDangerButton(
+              label: '删除',
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('删除'),
             ),
           ],
         );
@@ -265,18 +268,13 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('群聊设置')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        padding: MoriTheme.pagePadding,
         children: [
-          Card(
-            elevation: 0,
-            color: colors.surfaceContainerLow,
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
+          const MoriPageIntro(text: '修改群头像、名称，选择哪些角色参与群聊，以及他们回复的顺序。'),
+          MoriSettingsGroup(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Row(
                 children: [
                   GroupAvatar(
                     group: group,
@@ -291,7 +289,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                       children: [
                         FilledButton.tonalIcon(
                           onPressed: _saving ? null : _pickAvatar,
-                          icon: const Icon(Icons.add_photo_alternate_outlined),
+                          icon: const Icon(MoriIcons.imagePlus, size: 17),
                           label: const Text('更换群头像'),
                         ),
                         if (hasAvatar)
@@ -311,114 +309,82 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                   ),
                 ],
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _nameController,
-            maxLength: 30,
-            decoration: InputDecoration(
-              labelText: '群聊名称',
-              hintText: '例如：深夜聊天室',
-              counterText: '',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          DropdownButtonFormField<GroupReplyMode>(
-            initialValue: _replyMode,
-            decoration: InputDecoration(
-              labelText: '发言顺序',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            items: [
-              for (final mode in GroupReplyMode.values)
-                DropdownMenuItem<GroupReplyMode>(
-                  value: mode,
-                  child: Text(_replyModeLabel(mode)),
-                ),
             ],
-            onChanged: _saving
-                ? null
-                : (mode) {
-                    if (mode != null) {
-                      setState(() => _replyMode = mode);
-                    }
-                  },
           ),
-          const SizedBox(height: 8),
-          Text(
-            _replyModeDescription(_replyMode),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
+          const MoriSectionHeader(label: '群聊信息'),
+          MoriSettingsGroup(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
             children: [
-              Expanded(
-                child: Text(
-                  '群成员',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              TextField(
+                controller: _nameController,
+                maxLength: 30,
+                decoration: const InputDecoration(
+                  labelText: '群聊名称',
+                  hintText: '例如：深夜聊天室',
+                  counterText: '',
                 ),
               ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<GroupReplyMode>(
+                initialValue: _replyMode,
+                decoration: const InputDecoration(labelText: '发言顺序'),
+                items: [
+                  for (final mode in GroupReplyMode.values)
+                    DropdownMenuItem<GroupReplyMode>(
+                      value: mode,
+                      child: Text(_replyModeLabel(mode)),
+                    ),
+                ],
+                onChanged: _saving
+                    ? null
+                    : (mode) {
+                        if (mode != null) {
+                          setState(() => _replyMode = mode);
+                        }
+                      },
+              ),
+              const SizedBox(height: 7),
               Text(
-                '已选 ${_selectedIds.length} 人',
+                _replyModeDescription(_replyMode),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: colors.onSurfaceVariant,
+                  height: 1.45,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Card(
-            elevation: 0,
-            color: colors.surfaceContainerLow,
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+          MoriSectionHeader(
+            label: '群成员',
+            trailing: Text(
+              '已选 ${_selectedIds.length} 人',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
             ),
-            child: Column(
-              children: [
-                for (var index = 0; index < cards.length; index++) ...[
-                  if (index > 0)
-                    Divider(
-                      height: 1,
-                      indent: 72,
-                      endIndent: 16,
-                      color: colors.outlineVariant,
-                    ),
-                  CheckboxListTile(
-                    value: _selectedIds.contains(cards[index].id),
-                    onChanged: _saving
-                        ? null
-                        : (selected) {
-                            setState(() {
-                              final id = cards[index].id;
-                              if (selected == true) {
-                                _selectedIds.add(id);
-                              } else {
-                                _selectedIds.remove(id);
-                              }
-                            });
-                          },
-                    secondary: CharacterAvatar(
-                      character: cards[index],
-                      size: 40,
-                    ),
-                    title: Text(cards[index].displayName),
-                    subtitle: Text(cards[index].type.label),
-                    controlAffinity: ListTileControlAffinity.trailing,
-                  ),
-                ],
-              ],
-            ),
+          ),
+          MoriSettingsGroup(
+            dividerIndent: 66,
+            children: [
+              for (final card in cards)
+                CheckboxListTile(
+                  value: _selectedIds.contains(card.id),
+                  onChanged: _saving
+                      ? null
+                      : (selected) {
+                          setState(() {
+                            if (selected == true) {
+                              _selectedIds.add(card.id);
+                            } else {
+                              _selectedIds.remove(card.id);
+                            }
+                          });
+                        },
+                  secondary: CharacterAvatar(character: card, size: 40),
+                  title: Text(card.displayName),
+                  subtitle: Text(card.type.label),
+                  controlAffinity: ListTileControlAffinity.trailing,
+                ),
+            ],
           ),
           const SizedBox(height: 20),
           FilledButton.icon(
@@ -429,53 +395,38 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.save_outlined),
+                : const Icon(MoriIcons.save, size: 17),
             label: Text(_selectedIds.length < 2 ? '至少选择两个成员' : '保存群聊设置'),
           ),
-          const SizedBox(height: 16),
-          Card(
-            elevation: 0,
-            color: colors.surfaceContainerLow,
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 6,
+          const MoriSectionHeader(label: '群体资料'),
+          MoriSettingsGroup(
+            children: [
+              MoriSettingsTile(
+                icon: MoriIcons.groupRound,
+                title: '群公共记忆',
+                subtitle: '查看群印象和大家共同记住的事',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => GroupMemoryPage(groupId: widget.groupId),
+                    ),
+                  );
+                },
               ),
-              leading: Icon(Icons.groups_2_outlined, color: colors.primary),
-              title: const Text('群公共记忆'),
-              subtitle: const Text('查看群印象和大家共同记住的事'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => GroupMemoryPage(groupId: widget.groupId),
-                  ),
-                );
-              },
-            ),
+            ],
           ),
-          const SizedBox(height: 16),
-          Card(
-            elevation: 0,
-            color: colors.surfaceContainerLow,
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 6,
+          const MoriSectionHeader(label: '危险操作'),
+          MoriSettingsGroup(
+            children: [
+              MoriSettingsTile(
+                icon: MoriIcons.erase,
+                title: '删除聊天记录',
+                subtitle: '清空该群聊的全部本地聊天记录',
+                danger: true,
+                showChevron: false,
+                onTap: _saving ? null : _deleteHistory,
               ),
-              leading: Icon(Icons.delete_sweep_outlined, color: colors.error),
-              title: Text('删除聊天记录', style: TextStyle(color: colors.error)),
-              subtitle: const Text('清空该群聊的全部本地聊天记录'),
-              onTap: _saving ? null : _deleteHistory,
-            ),
+            ],
           ),
         ],
       ),
@@ -500,19 +451,28 @@ class _AvatarSourceButton extends StatelessWidget {
     final colors = theme.colorScheme;
 
     return Material(
-      color: colors.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(16),
+      color: colors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(MoriRadius.large),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
+          padding: const EdgeInsets.symmetric(vertical: 22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 32, color: colors.primary),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 23, color: colors.onPrimaryContainer),
+              ),
               const SizedBox(height: 10),
-              Text(label, style: theme.textTheme.titleSmall),
+              Text(label, style: theme.textTheme.labelLarge),
             ],
           ),
         ),

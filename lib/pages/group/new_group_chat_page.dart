@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mori_ai/services/character_store.dart';
 import 'package:mori_ai/services/group_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 
 class NewGroupChatPage extends StatefulWidget {
@@ -83,45 +85,30 @@ class _NewGroupChatPageState extends State<NewGroupChatPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
-          Text(
-            '选择参与群聊的角色卡。发送消息后，群成员会依次回复。',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _nameController,
-            maxLength: 30,
-            decoration: InputDecoration(
-              labelText: '群聊名称',
-              hintText: '留空则使用成员名称',
-              counterText: '',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
+          const MoriPageIntro(text: '选择参与群聊的角色卡。发送消息后，群成员会依次回复。'),
+          MoriSettingsGroup(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
             children: [
-              Expanded(
-                child: Text(
-                  '选择成员',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Text(
-                '已选 ${_selectedIds.length} 人',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colors.onSurfaceVariant,
+              TextField(
+                controller: _nameController,
+                maxLength: 30,
+                decoration: const InputDecoration(
+                  labelText: '群聊名称',
+                  hintText: '留空则使用成员名称',
+                  counterText: '',
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          MoriSectionHeader(
+            label: '选择成员',
+            trailing: Text(
+              '已选 ${_selectedIds.length} 人',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ),
           if (cards.length < 2)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
@@ -134,66 +121,58 @@ class _NewGroupChatPageState extends State<NewGroupChatPage> {
               ),
             )
           else
-            Card(
-              elevation: 0,
-              color: colors.surfaceContainerLow,
-              clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                children: [
-                  for (var index = 0; index < cards.length; index++) ...[
-                    if (index > 0)
-                      Divider(
-                        height: 1,
-                        indent: 72,
-                        endIndent: 16,
-                        color: colors.outlineVariant,
-                      ),
-                    CheckboxListTile(
-                      value: _selectedIds.contains(cards[index].id),
-                      onChanged: _creating
-                          ? null
-                          : (selected) {
-                              setState(() {
-                                final id = cards[index].id;
-                                if (selected == true) {
-                                  _selectedIds.add(id);
-                                } else {
-                                  _selectedIds.remove(id);
-                                }
-                              });
-                            },
-                      secondary: CharacterAvatar(
-                        character: cards[index],
-                        size: 40,
-                      ),
-                      title: Text(cards[index].displayName),
-                      subtitle: Text(cards[index].type.label),
-                      controlAffinity: ListTileControlAffinity.trailing,
-                    ),
-                  ],
-                ],
-              ),
+            MoriSettingsGroup(
+              dividerIndent: 66,
+              children: [
+                for (final card in cards)
+                  CheckboxListTile(
+                    value: _selectedIds.contains(card.id),
+                    onChanged: _creating
+                        ? null
+                        : (selected) {
+                            setState(() {
+                              if (selected == true) {
+                                _selectedIds.add(card.id);
+                              } else {
+                                _selectedIds.remove(card.id);
+                              }
+                            });
+                          },
+                    secondary: CharacterAvatar(character: card, size: 40),
+                    title: Text(card.displayName),
+                    subtitle: Text(card.type.label),
+                    controlAffinity: ListTileControlAffinity.trailing,
+                  ),
+              ],
             ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: FilledButton.icon(
-          onPressed: canCreate ? _createGroup : null,
-          icon: _creating
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.group_add_outlined),
-          label: Text(
-            _selectedIds.length < 2
-                ? '至少选择两个角色'
-                : '创建群聊（${_selectedIds.length} 人）',
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          border: Border(
+            top: BorderSide(
+              color: colors.outlineVariant.withValues(alpha: 0.7),
+              width: 0.8,
+            ),
+          ),
+        ),
+        child: SafeArea(
+          minimum: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          child: FilledButton.icon(
+            onPressed: canCreate ? _createGroup : null,
+            icon: _creating
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(MoriIcons.groupAdd, size: 18),
+            label: Text(
+              _selectedIds.length < 2
+                  ? '至少选择两个角色'
+                  : '创建群聊（${_selectedIds.length} 人）',
+            ),
           ),
         ),
       ),

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:mori_ai/models/character_profile.dart';
 import 'package:mori_ai/pages/memory/character_card_edit_page.dart';
 import 'package:mori_ai/services/character_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 import 'package:mori_ai/widgets/character_avatar.dart';
 
 class CharacterCardSettingsPage extends StatefulWidget {
@@ -81,9 +84,9 @@ class _CharacterCardSettingsPageState extends State<CharacterCardSettingsPage> {
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('取消'),
             ),
-            FilledButton(
+            MoriDangerButton(
+              label: '删除',
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('删除'),
             ),
           ],
         );
@@ -132,63 +135,38 @@ class _CharacterCardSettingsPageState extends State<CharacterCardSettingsPage> {
           final canDelete = CharacterStore.instance.canDeleteCards;
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            padding: MoriTheme.pagePadding,
             children: [
-              Text(
-                '点击角色卡进入编辑。',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Card(
-                elevation: 0,
-                color: colors.surfaceContainerLow,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    for (var index = 0; index < cards.length; index++) ...[
-                      if (index > 0)
-                        Divider(
-                          height: 1,
-                          indent: 16,
-                          endIndent: 16,
-                          color: colors.outlineVariant,
-                        ),
-                      _CharacterCardTile(
-                        card: cards[index],
-                        canDelete: canDelete && !_busy,
-                        onEdit: () => _openEditor(cards[index]),
-                        onDelete: () => _deleteCard(cards[index]),
-                      ),
-                    ],
-                    Divider(height: 1, color: colors.outlineVariant),
-                    ListTile(
-                      enabled: !_busy,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 4,
-                      ),
-                      leading: Icon(
-                        Icons.add_circle_outline,
-                        color: colors.primary,
-                      ),
-                      title: const Text('新建角色卡'),
-                      subtitle: const Text('保存后才会添加到角色卡列表'),
-                      onTap: _addCard,
+              const MoriPageIntro(text: '点击角色卡进入编辑。角色卡决定角色的称呼、性格和开场白。'),
+              MoriSettingsGroup(
+                dividerIndent: 66,
+                children: [
+                  for (final card in cards)
+                    _CharacterCardTile(
+                      card: card,
+                      canDelete: canDelete && !_busy,
+                      onEdit: () => _openEditor(card),
+                      onDelete: () => _deleteCard(card),
                     ),
-                  ],
-                ),
+                  MoriSettingsTile(
+                    icon: MoriIcons.plus,
+                    title: '新建角色卡',
+                    subtitle: '保存后才会添加到角色卡列表',
+                    enabled: !_busy,
+                    onTap: _addCard,
+                  ),
+                ],
               ),
               if (!canDelete) ...[
-                const SizedBox(height: 8),
-                Text(
-                  '至少保留一张角色卡。新建其他角色卡后才可以删除当前角色卡。',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    '至少保留一张角色卡。新建其他角色卡后才可以删除当前角色卡。',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                      height: 1.5,
+                    ),
                   ),
                 ),
               ],
@@ -252,7 +230,7 @@ class _CharacterCardTile extends StatelessWidget {
       trailing: IconButton(
         onPressed: canDelete ? onDelete : null,
         tooltip: canDelete ? '删除角色卡' : '至少保留一张角色卡',
-        icon: const Icon(Icons.delete_outline_rounded),
+        icon: const Icon(Icons.delete_outline_rounded, size: 20),
       ),
       onTap: onEdit,
     );

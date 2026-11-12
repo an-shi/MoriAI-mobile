@@ -5,6 +5,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mori_ai/models/user_profile.dart';
 import 'package:mori_ai/services/avatar_store.dart';
 import 'package:mori_ai/services/user_profile_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
+import 'package:mori_ai/ui/mori_theme.dart';
 import 'package:mori_ai/widgets/user_avatar.dart';
 
 class PersonalSettingsPage extends StatefulWidget {
@@ -53,7 +56,7 @@ class _PersonalSettingsPageState extends State<PersonalSettingsPage> {
             children: [
               Expanded(
                 child: _AvatarSourceButton(
-                  icon: Icons.photo_library_outlined,
+                  icon: MoriIcons.photos,
                   label: '照片',
                   onTap: () =>
                       Navigator.of(sheetContext).pop(ImageSource.gallery),
@@ -62,7 +65,7 @@ class _PersonalSettingsPageState extends State<PersonalSettingsPage> {
               const SizedBox(width: 16),
               Expanded(
                 child: _AvatarSourceButton(
-                  icon: Icons.photo_camera_outlined,
+                  icon: MoriIcons.camera,
                   label: '拍摄',
                   onTap: () =>
                       Navigator.of(sheetContext).pop(ImageSource.camera),
@@ -203,18 +206,13 @@ class _PersonalSettingsPageState extends State<PersonalSettingsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('个人信息')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        padding: MoriTheme.pagePadding,
         children: [
-          Card(
-            elevation: 0,
-            color: colors.surfaceContainerLow,
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
+          const MoriPageIntro(text: '这些信息只用于你在 Mori 里的显示名称和角色对你的称呼。'),
+          MoriSettingsGroup(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Row(
                 children: [
                   UserAvatar(
                     profile: profile,
@@ -229,7 +227,7 @@ class _PersonalSettingsPageState extends State<PersonalSettingsPage> {
                       children: [
                         FilledButton.tonalIcon(
                           onPressed: _saving ? null : _pickAvatar,
-                          icon: const Icon(Icons.add_photo_alternate_outlined),
+                          icon: const Icon(MoriIcons.imagePlus, size: 17),
                           label: const Text('更换头像'),
                         ),
                         if (hasAvatar)
@@ -249,113 +247,99 @@ class _PersonalSettingsPageState extends State<PersonalSettingsPage> {
                   ),
                 ],
               ),
-            ),
+            ],
           ),
-          const SizedBox(height: 16),
-          Card(
-            elevation: 0,
-            color: colors.surfaceContainerLow,
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '基本资料',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _nameController,
-                    maxLength: 24,
-                    textInputAction: TextInputAction.next,
-                    decoration: InputDecoration(
-                      labelText: '名称',
-                      hintText: '例如：小森',
-                      counterText: '',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<UserGender>(
-                    initialValue: _gender,
-                    decoration: InputDecoration(
-                      labelText: '性别',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    items: [
-                      for (final gender in UserGender.values)
-                        DropdownMenuItem<UserGender>(
-                          value: gender,
-                          child: Text(gender.label),
-                        ),
-                    ],
-                    onChanged: (gender) {
-                      if (gender != null) {
-                        setState(() => _gender = gender);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 2,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: colors.outline),
-                    ),
-                    leading: const Icon(Icons.cake_outlined),
-                    title: const Text('生日'),
-                    subtitle: Text(
-                      _birthday == null ? '未设置' : _formatDate(_birthday!),
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_birthday != null)
-                          IconButton(
-                            onPressed: () => setState(() => _birthday = null),
-                            tooltip: '清除生日',
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                        const Icon(Icons.chevron_right_rounded),
-                      ],
-                    ),
-                    onTap: _pickBirthday,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _signatureController,
-                    maxLength: 100,
-                    minLines: 2,
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      labelText: '个性签名',
-                      hintText: '写一句介绍自己的话',
-                      counterText: '',
-                      alignLabelWithHint: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ],
+          const MoriSectionHeader(label: '基本资料'),
+          MoriSettingsGroup(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            children: [
+              TextField(
+                controller: _nameController,
+                maxLength: 24,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: '名称',
+                  hintText: '例如：小森',
+                  counterText: '',
+                ),
               ),
-            ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<UserGender>(
+                initialValue: _gender,
+                decoration: const InputDecoration(labelText: '性别'),
+                items: [
+                  for (final gender in UserGender.values)
+                    DropdownMenuItem<UserGender>(
+                      value: gender,
+                      child: Text(gender.label),
+                    ),
+                ],
+                onChanged: (gender) {
+                  if (gender != null) {
+                    setState(() => _gender = gender);
+                  }
+                },
+              ),
+              const SizedBox(height: 14),
+              Material(
+                color: colors.surfaceContainer,
+                borderRadius: BorderRadius.circular(MoriRadius.medium),
+                clipBehavior: Clip.antiAlias,
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 1,
+                  ),
+                  leading: Icon(
+                    MoriIcons.cake,
+                    size: 20,
+                    color: colors.primary,
+                  ),
+                  title: Text(
+                    '生日',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 15.5,
+                    ),
+                  ),
+                  subtitle: Text(
+                    _birthday == null ? '未设置' : _formatDate(_birthday!),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_birthday != null)
+                        IconButton(
+                          onPressed: () => setState(() => _birthday = null),
+                          tooltip: '清除生日',
+                          icon: const Icon(MoriIcons.close, size: 18),
+                        ),
+                      Icon(
+                        MoriIcons.chevron,
+                        size: 18,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                  onTap: _pickBirthday,
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _signatureController,
+                maxLength: 100,
+                minLines: 2,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: '个性签名',
+                  hintText: '写一句介绍自己的话',
+                  counterText: '',
+                  alignLabelWithHint: true,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 22),
           FilledButton.icon(
             onPressed: _saving ? null : _save,
             icon: _saving
@@ -364,7 +348,7 @@ class _PersonalSettingsPageState extends State<PersonalSettingsPage> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.save_outlined),
+                : const Icon(MoriIcons.save, size: 17),
             label: const Text('保存个人信息'),
           ),
         ],
@@ -394,19 +378,28 @@ class _AvatarSourceButton extends StatelessWidget {
     final colors = theme.colorScheme;
 
     return Material(
-      color: colors.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(16),
+      color: colors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(MoriRadius.large),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
+          padding: const EdgeInsets.symmetric(vertical: 22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 32, color: colors.primary),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 23, color: colors.onPrimaryContainer),
+              ),
               const SizedBox(height: 10),
-              Text(label, style: theme.textTheme.titleSmall),
+              Text(label, style: theme.textTheme.labelLarge),
             ],
           ),
         ),

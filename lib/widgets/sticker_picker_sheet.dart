@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:mori_ai/models/sticker.dart';
 import 'package:mori_ai/services/sticker_store.dart';
+import 'package:mori_ai/ui/mori_components.dart';
+import 'package:mori_ai/ui/mori_icons.dart';
 
 /// 打开表情包选择面板。
 ///
@@ -41,6 +43,7 @@ class StickerPickerSheet extends StatelessWidget {
                   '表情包',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
+                    fontSize: 17,
                   ),
                 ),
                 const Spacer(),
@@ -61,8 +64,8 @@ class StickerPickerSheet extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 5,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 9,
+                    crossAxisSpacing: 9,
                   ),
                   itemCount: stickers.length + 1,
                   itemBuilder: (context, index) {
@@ -96,9 +99,9 @@ class StickerPickerSheet extends StatelessWidget {
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('取消'),
           ),
-          FilledButton(
+          MoriDangerButton(
+            label: '删除',
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('删除'),
           ),
         ],
       ),
@@ -131,7 +134,7 @@ class _AddStickerTile extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add_rounded, color: colors.primary),
+              Icon(MoriIcons.plus, size: 22, color: colors.primary),
               const SizedBox(height: 2),
               Text(
                 '添加',
@@ -169,10 +172,7 @@ class _StickerTile extends StatelessWidget {
         child: bytes == null
             ? ColoredBox(
                 color: colors.surfaceContainerHighest,
-                child: Icon(
-                  Icons.broken_image_outlined,
-                  color: colors.onSurfaceVariant,
-                ),
+                child: Icon(MoriIcons.imageOff, color: colors.onSurfaceVariant),
               )
             : Image.memory(
                 bytes,
@@ -182,7 +182,7 @@ class _StickerTile extends StatelessWidget {
                   return ColoredBox(
                     color: colors.surfaceContainerHighest,
                     child: Icon(
-                      Icons.broken_image_outlined,
+                      MoriIcons.imageOff,
                       color: colors.onSurfaceVariant,
                     ),
                   );
