@@ -5,7 +5,8 @@
         android:label="Mori"
         android:name="${applicationName}"
         android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

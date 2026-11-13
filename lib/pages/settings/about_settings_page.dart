@@ -67,16 +67,16 @@ class AboutSettingsPage extends StatelessWidget {
                 showChevron: false,
               ),
               MoriSettingsTile(
-                icon: MoriIcons.cpu,
-                title: '模型服务',
-                subtitle: '由你配置的模型供应商提供',
+                icon: MoriIcons.server,
+                title: '数据服务',
+                subtitle: '角色、会话和消息由你的 MoriBot 服务器保存',
                 showChevron: false,
               ),
             ],
           ),
           const SizedBox(height: 24),
           Text(
-            'Mori 不会将你的 API Key 上传到除所选供应商之外的任何服务。',
+            'MoriMobile 不保存模型供应商的 API Key，也不直接调用模型供应商。对话由已配对的 MoriBot 服务器生成。',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
               color: colors.onSurfaceVariant,

@@ -51,6 +51,8 @@ abstract final class MoriIcons {
   static const camera = LucideIcons.camera;
   static const sticker = LucideIcons.sticker;
   static const smile = LucideIcons.smile;
+  static const volume = LucideIcons.volume2;
+  static const volumeOff = LucideIcons.volumeX;
 
   // Features
   static const sparkles = LucideIcons.sparkles;
@@ -84,6 +86,21 @@ abstract final class MoriIcons {
   static const bookmarkAdd = LucideIcons.bookmarkPlus;
   static const imageAlt = LucideIcons.image;
   static const user = LucideIcons.userRound;
+
+  // MoriBot connection and media
+  static const server = LucideIcons.server;
+  static const wifi = LucideIcons.wifiHigh;
+  static const wifiOff = LucideIcons.wifiOff;
+  static const play = LucideIcons.play;
+  static const pause = LucideIcons.pause;
+  static const logout = LucideIcons.logOut;
+  static const alert = LucideIcons.circleAlert;
+  static const plug = LucideIcons.plug;
+  static const link = LucideIcons.link;
+  static const cloud = LucideIcons.cloud;
+  static const cloudOff = LucideIcons.cloudOff;
+  static const lock = LucideIcons.lockKeyhole;
+  static const database = LucideIcons.hardDrive;
 
   // Chat
   static const message = LucideIcons.messageCircle;
