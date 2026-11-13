@@ -1,6 +1,6 @@
 # Mori
 
-Mori 是一个使用 Flutter 开发的移动端 AI 陪伴助手，当前包含对话、记忆与角色卡、动态三个主页面，支持角色卡、群聊、动态、自动消息、心情、每日日记和长期记忆。
+Mori 是 MoriBot 的官方 Flutter 手机客户端。当前版本以 MoriBot 为唯一数据源：角色卡、会话、消息和生成媒体都保存在服务端，手机本地只保留可重建的缓存。
 
 ## 运行
 
@@ -9,43 +9,61 @@ flutter pub get
 flutter run
 ```
 
-## 配置 API Key 和模型
+## 首次配对
 
-API Key 和模型都在应用内配置，不需要改代码：
+1. 启动 MoriBot 服务端，登录后台。
+2. 在后台首页点击「连接 MoriMobile」，生成一次性配对码。
+3. 打开 Mori，在配对页填写：
+   - 服务器地址，例如 `http://192.168.1.10:6186` 或 `https://mori.example.com`
+   - 8 位配对码
+   - 设备名称
+4. 也可以直接粘贴 `morimobile://pair?server=...&code=...` 配对链接。
+5. 配对成功后进入主界面，之后打开应用会使用安全存储中的设备令牌自动登录。
 
-1. 启动应用，进入底部 **设置**。
-2. 找到 **DeepSeek API**，在输入框中粘贴 API Key。
-3. 点击 **保存**。
-4. 在 **对话模型** 下拉框中选择模型，选择后立即保存。
-5. 回到 **对话** 即可开始聊天。
+## 页面
 
-API Key 通过 `flutter_secure_storage` 保存在本机安全存储中（Android Keystore / iOS Keychain），不写入代码，也不会被 Git 跟踪。模型选择通过 `shared_preferences` 保存在本地。修改后下一条消息立即使用新的配置。
+底部导航包含三个页面：
 
-## 安全说明
+- **对话**：MoriBot 会话列表、新建会话、下拉刷新、上拉加载更多。
+- **角色**：服务端角色卡列表，可查看角色简介并开始新会话。
+- **设置**：账户、服务器、设备、实时通道、清除缓存和解除配对。
 
-移动端直连 DeepSeek 时，API Key 会随请求发送到 DeepSeek。正式上线时，建议改成由自己的后端代理请求，避免 Key 暴露在客户端。
+聊天页支持：
 
-## 模型
+- 加载和增量同步服务端历史消息
+- 发送文本消息，支持强制语音回复
+- 播放 MoriBot 生成的语音
+- 查看 MoriBot 生成的图片
+- 重命名、删除会话
+- 清除本地缓存不会影响服务端数据
 
-设置页提供官方当前模型：
+## 数据与缓存
 
-- **DeepSeek Flash**（`deepseek-flash`）：响应更快，适合日常陪伴聊天，默认选项。
-- **DeepSeek V4 Pro**（`deepseek-v4-pro`）：能力更强，适合复杂问题，价格更高。
+- MoriBot 是角色卡、会话、消息和媒体的唯一数据源。
+- 手机端通过设备令牌访问 `/api/v1/mobile/app/*`。
+- 会话列表、角色卡和消息会写入本地缓存，用于快速打开页面。
+- 消息按 `id` 增量同步，只有缓存缺失时才重新拉取完整历史。
+- 退出配对或清除缓存后，本地数据可以安全丢弃，重新从服务端同步。
+- 服务端把会话和消息保存在 SQLite，媒体保存在 `data/media/`，都会随 MoriBot 数据目录一起迁移。
 
-接口：
+## 实时通道
 
-```text
-POST https://api.deepseek.com/chat/completions
-```
-
-返回格式为 OpenAI 兼容的流式 SSE；请求中关闭了 thinking，适合日常陪伴聊天。
+配对成功后，客户端会连接 MoriBot 的 WSS 实时通道，用于服务端事件和连接状态。聊天请求仍通过 HTTPS JSON API 完成；断线时页面会显示缓存并提供重试。
 
 ## 目录
 
 ```text
 lib/
-├── config/       模型列表、接口地址和系统提示词
-├── models/       聊天消息模型
-├── pages/        对话、记忆与角色卡、日记、动态、设置页面
-└── services/     模型请求、存储、自动消息、心情与日记
+├── models/moribot/       MoriBot API 数据模型
+├── pages/moribot/        配对、会话、角色、聊天、账户页面
+├── services/moribot/     客户端、会话、缓存、消息仓库、实时通道、媒体缓存
+├── ui/                   主题与通用组件
+└── widgets/moribot/      MoriBot 专用头像等组件
 ```
+
+## 安全说明
+
+- 设备令牌保存在 Android Keystore / iOS Keychain 中，不写入代码或 Git。
+- 手机不保存模型供应商 API Key，也不直接调用模型供应商。
+- 生产环境请通过 HTTPS/WSS 暴露 MoriBot，并配置 `dashboard.public_url`、`trusted_hosts` 和 `force_https`。
+- 解除配对只会清除本机令牌和缓存，不会删除服务端数据。
